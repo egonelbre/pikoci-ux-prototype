@@ -33,7 +33,16 @@
     if (!a) m.innerHTML = VIEWS.home();
     else if (a === 'pipelines') m.innerHTML = VIEWS.pipelines();
     else if (a === 'p') m.innerHTML = VIEWS.pipeline(b, c, d);
-    else if (a === 'b') m.innerHTML = VIEWS.build(b);
+    else if (a === 'b') {
+      // deep-link alias: #/b/<pipeline>/<job>/<n> resolves by coordinates —
+      // stable across data.js edits, unlike generated build ids (#/b/b1042)
+      let id = b;
+      if (d !== undefined) {
+        const x = window.DATA.builds.find(y => y.pipeline === b && y.job === c && String(y.n) === String(d));
+        id = x ? x.id : b;
+      }
+      m.innerHTML = VIEWS.build(id);
+    }
     else if (a === 'changes') m.innerHTML = gate('changes') || VIEWS.changes(b, c);
     else if (a === 'environments') m.innerHTML = gate('environments') || VIEWS.environments(b);
     else if (a === 'insights') m.innerHTML = VIEWS.gated('insights');

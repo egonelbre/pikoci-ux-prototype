@@ -14,6 +14,13 @@
   a.card b { font-size: 16px; }
   a.card small { opacity: .65; display: block; margin-top: 2px; }
   p.mut { opacity: .65; font-size: 13px; }
+  h2 { font-size: 15px; margin: 28px 0 4px; }
+  .jump { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 28px; }
+  .jump h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .55; margin: 14px 0 4px; }
+  .jump a { display: block; padding: 3px 0; text-decoration: none; }
+  .jump a:hover b { text-decoration: underline; }
+  .jump b { font-weight: 600; }
+  .jump small { opacity: .65; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -23,7 +30,40 @@ Everything runs on fake data; minimal visual design on purpose — the subject i
 <a class="card" href="preview/index.html"><b>Preview app →</b>
   <small>the reference implementation of UX-PLAN v4.1: team scoping, change-centric PR inbox,
   verdict-first PR pages, two-pane build view, queue/workers with ephemeral pools, environments with rollback</small></a>
-<a class="card" href="prototypes/index.html"><b>14 prototype variations →</b>
+<h2>Jump straight to a specific state</h2>
+<p class="mut" style="margin-top:0">Deep links into the preview, so you don't have to hunt for the interesting cases.</p>
+<div class="jump">
+  <div>
+    <h3>Changes &amp; PRs</h3>
+    <a href="preview/index.html#/changes/open"><b>PR inbox at scale</b><small>~144 open PRs across 9 repos, dense table, filter</small></a>
+    <a href="preview/index.html#/changes/pr/481"><b>PR landing page</b><small>verdict-first: what failed, superseded pushes below</small></a>
+    <a href="preview/index.html#/changes/pr/472"><b>Draft PR, deferred tier</b><small>lint failed; expensive jobs wait until ready-for-review</small></a>
+    <a href="preview/index.html#/changes/pr/489"><b>Held fork PR</b><small>first-time contributor — run is held for a human release</small></a>
+  </div>
+  <div>
+    <h3>Builds &amp; checks</h3>
+    <a href="preview/index.html#/b/pikoci-pr/lint/201"><b>Lint failure</b><small>staticcheck/govet/errcheck findings as checks, source context</small></a>
+    <a href="preview/index.html#/b/pikoci-pr/test-unit/200"><b>Test failure</b><small>new vs still-failing, race output, per-test history dots</small></a>
+    <a href="preview/index.html#/b/pikoci-pr/test-matrix--macos/189"><b>Broken test report</b><small>junit XML truncated — build stays green, degrades honestly</small></a>
+    <a href="preview/index.html#/b/pikoci/build/142"><b>Artifacts &amp; measurements</b><small>binaries with shas; binary size / benchmarks with deltas</small></a>
+    <a href="preview/index.html#/b/pikoci/deploy/142"><b>Approval gate</b><small>deploy waiting for a second approval, diff since last deploy</small></a>
+    <a href="preview/index.html#/b/pikoci/test-integration/143"><b>Live build</b><small>log streaming, follow mode — watch #143 run</small></a>
+  </div>
+  <div>
+    <h3>Pipelines &amp; graphs</h3>
+    <a href="preview/index.html#/p/delivery"><b>Complex graph</b><small>16-job release train: build → checks → matrices → e2e → signing → push → deploy, with outputs</small></a>
+    <a href="preview/index.html#/pipelines"><b>All pipelines</b><small>~40 as a dense table: weather, duration trends</small></a>
+    <a href="preview/index.html#/environments"><b>Environments</b><small>20 deploy targets, "needs attention" filter, drift</small></a>
+  </div>
+  <div>
+    <h3>Ops</h3>
+    <a href="preview/index.html#/queue"><b>Queue</b><small>waiting builds; ephemeral pool scaling up from zero</small></a>
+    <a href="preview/index.html#/workers"><b>Workers</b><small>static + autoscaled GCP/AWS pools, cpu &amp; disk gauges</small></a>
+    <a href="preview/index.html#/workers/helsinki-1"><b>Worker telemetry</b><small>week of cpu/disk with runs overlaid — what filled the disk?</small></a>
+  </div>
+</div>
+
+<a class="card" style="margin-top:24px" href="prototypes/index.html"><b>14 prototype variations →</b>
   <small>one shared dataset, fourteen paradigms: graph-first, runs-first, wallboard, terminal,
   trace, attention inbox, dense table, synthesis, change-centric …</small></a>
 <p class="mut">Docs live in the repo: UX-PLAN.md (start here), REQUIREMENTS.md, SCENARIOS.md, RESEARCH.md.</p>
