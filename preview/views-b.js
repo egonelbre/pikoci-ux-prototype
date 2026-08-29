@@ -422,6 +422,12 @@
       const histDot = h => h.s === null
         ? '<span class="th-dot none" title="no report in that run">·</span>'
         : `<a class="th-dot ${h.s}" href="#/b/${h.b.id}" title="#${h.b.n}: ${h.s}"></a>`;
+      // ctx = a few lines of context under a failure: source excerpt when it
+      // has a line number (lint), raw output when it doesn't (test failures)
+      const ctxRow = t => !t.ctx ? '' : `<tr class="ctx-tr"><td></td><td colspan="4"><pre class="ctx-code">${t.ctx.code.map((l, i) => {
+        const n = t.ctx.ln != null ? t.ctx.ln + i : null;
+        return `<span class="ctx-l${n !== null && n === t.ctx.hl ? ' hl' : ''}">${n !== null ? `<span class="ctx-n">${n}</span>` : ''}${esc(l)}</span>`;
+      }).join('')}</pre></td></tr>`;
       out += `<h3>Checks <span class="mut small">— ${stats.pass} passed${stats.fail ? ` · <b class="c-failed">${stats.fail} failed</b>` : ''}${stats.skip ? ` · ${stats.skip} skipped` : ''} · ${fmtDur(stats.dur)} test time</span></h3>`;
       if (failed.length) out += `<div class="tbl-scroll"><table class="tbl ctbl wtbl">
         ${failed.map(t => {
@@ -435,7 +441,7 @@
           <td class="mut small">${esc(t.msg || '')}</td>
           <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td>
           <td class="r nowrap"><span class="th-hist" title="this test across the last runs with reports">${hist.map(histDot).join('')}</span></td>
-        </tr>`;
+        </tr>${ctxRow(t)}`;
       }).join('')}</table></div>`;
       if (skipped.length) out += skipped.map(t => `<div class="mut small pad-s">◇ <code>${esc(t.id)}</code> skipped${t.msg ? ` — ${esc(t.msg)}` : ''}</div>`).join('');
       // scale: suites run to 8000 tests across 100 packages. Failures stay a

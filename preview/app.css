@@ -154,6 +154,13 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .th-dot.fail { background: var(--bad); }
 .th-dot.skip { background: var(--pend); }
 .th-dot.none { width: auto; color: var(--faint-t); }
+/* failure context: a few source/output lines under a failed check */
+.ctx-tr td { border-top: none; padding-top: 0; }
+.ctx-code { margin: 2px 0 8px; padding: 6px 10px; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; line-height: 1.55; overflow-x: auto; }
+.ctx-l { display: block; white-space: pre; }
+.ctx-l.hl { background: color-mix(in srgb, var(--bad) 11%, var(--bg2)); margin: 0 -10px; padding: 0 10px; }
+.ctx-l.hl .ctx-n { color: var(--bad-t); }
+.ctx-n { display: inline-block; min-width: 30px; margin-right: 12px; text-align: right; color: var(--faint-t); user-select: none; }
 .mine-row td:first-child { box-shadow: inset 3px 0 var(--accent); }
 /* PR detail: graph + checks side by side, wrapping when narrow */
 .pr-cols { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; margin-bottom: 12px; }
