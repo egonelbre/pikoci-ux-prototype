@@ -138,6 +138,7 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .ctt > * { flex: none; }
 .ctt .row-link { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trunc-code { display: inline-block; max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.you-mark { color: var(--accent); font-size: 12px; }
 .mine-row td:first-child { box-shadow: inset 3px 0 var(--accent); }
 /* PR detail: graph + checks side by side, wrapping when narrow */
 .pr-cols { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; margin-bottom: 12px; }
