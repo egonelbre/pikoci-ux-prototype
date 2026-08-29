@@ -184,58 +184,79 @@
       }).join('')}
         </tbody>
       </table></div>`;
-    } else if (tab === 'branches') {
+    } else if (tab === 'repos') {
       if (prN) return VIEWS.branchFeed(prN);
       // The branch surface at company scale (50 repos × 100 releases + 30
       // branches) is thousands of branch pipelines, almost all quiet or EOL.
-      // So this is a QUERY, not a picker: filter + attention ranking, with
-      // quiet branches (no commit in 30d) hidden until asked for. Feature
-      // branches never appear at all — they enter as PRs (Open PRs).
+      // The REPO is the stable top-level object — ~50 of them, each a
+      // roll-up of its branches: worst-active status, red branches named on
+      // the summary line, branches inside on expand. Quiet branches (no
+      // commit in 30d) stay hidden until "all" or search. Feature branches
+      // never appear at all — they enter as PRs (Open PRs).
       const rows = P.branchIndex();
       const q = (brFilter || '').toLowerCase();
+      const terms = q.split(/\s+/).filter(Boolean);
       const quiet = r => Date.now() - r.lastAt > 30 * 86400e3;
-      const C = (k, lbl) => `<button class="chip-btn ${brChip === k ? 'on' : ''}" onclick="_brC('${k}')">${lbl}</button>`;
-      let vis = rows;
-      if (q) { // every term must match — "fraud release-2.4" finds one EOL line among thousands
-        const terms = q.split(/\s+/).filter(Boolean);
-        vis = rows.filter(r => { const hay = (r.repo + ' ' + r.branch + ' ' + r.name).toLowerCase(); return terms.every(t => hay.includes(t)); });
-      } else if (brChip === 'attention') {
-        // red AND alive — a branch that's been red for a year is archaeology,
-        // not attention; it stays reachable under "all" and via search
-        vis = rows.filter(r => ['failed', 'waiting_for_approval', 'held'].includes(r.status) && !quiet(r));
-      } else if (brChip === 'active') vis = rows.filter(r => !quiet(r));
       const rank = r => r.status === 'paused' ? 6.5 : (P.RANK[r.status] !== undefined ? P.RANK[r.status] : 9);
-      vis = vis.slice().sort((a, b) => (rank(a) - rank(b)) || (b.lastAt - a.lastAt));
-      const hidden = rows.length - vis.length;
-      const CAP = 200;
-      body = `<div class="ctoolbar">
-          <input data-filter aria-label="filter branches" placeholder="filter repo, branch…  ( / )" value="${esc(brFilter)}" oninput="_brF(this.value)">
-          ${C('active', 'active')}${C('attention', '✕ needs attention')}${C('all', 'all')}
-          <span class="sp"></span>
-          <span class="mut small">${vis.length} of ${rows.length} branches${!q && brChip === 'active' && hidden ? ` · ${hidden} quiet (no commit in 30d) hidden` : ''}</span>
-        </div>
-        <div class="tbl-scroll"><table class="tbl ctbl fixed">
-        <colgroup><col style="width:30px"><col style="width:290px"><col><col style="width:110px"><col style="width:96px"><col style="width:84px"></colgroup>
-        <thead><tr><th></th><th>branch</th><th>last commit</th><th>author</th><th class="r">checks</th><th class="r">updated</th></tr></thead><tbody>
-        ${vis.slice(0, CAP).map(r => {
-        const href = '#/changes/branches/' + encodeURIComponent(r.name);
+      // "attention" = red AND alive — a branch red for a year is archaeology,
+      // reachable via "all" and search, not something to shout about
+      const attn = r => ['failed', 'waiting_for_approval', 'held'].includes(r.status) && !quiet(r);
+      const match = r => { const hay = (r.repo + ' ' + r.branch + ' ' + r.name).toLowerCase(); return terms.every(t => hay.includes(t)); };
+      const C = (k, lbl) => `<button class="chip-btn ${brChip === k ? 'on' : ''}" onclick="_brC('${k}')">${lbl}</button>`;
+      const groups = {};
+      for (const r of rows) (groups[r.repo] = groups[r.repo] || []).push(r);
+      const CAPB = 60;
+      let shownBranches = 0;
+      const glist = Object.entries(groups).map(([repo, g]) => {
+        const vis = q ? g.filter(match)
+          : brChip === 'attention' ? g.filter(attn)
+            : brChip === 'active' ? g.filter(r => !quiet(r)) : g;
+        const sorted = vis.slice().sort((a, b) => (rank(a) - rank(b)) || (b.lastAt - a.lastAt));
+        const alive = g.filter(r => !quiet(r));
+        const pool = alive.length ? alive : g;
+        const worst = pool.slice().sort((a, b) => rank(a) - rank(b))[0];
+        return {
+          repo, g, sorted, team: g[0].team, red: g.filter(attn),
+          active: alive.length, worst: worst.status, wrank: rank(worst),
+          lastAt: Math.max(...g.map(r => r.lastAt)),
+        };
+      }).filter(x => x.sorted.length)
+        .sort((a, b) => (a.wrank - b.wrank) || (b.lastAt - a.lastAt));
+      glist.forEach(x => { shownBranches += x.sorted.length; });
+      const brRow = r => {
+        const href = '#/changes/repos/' + encodeURIComponent(r.name);
         const head = r.pl ? null : r.commits[0];
         return `<tr onclick="location.hash='${href}'">
           <td class="c-${r.status} ${r.status === 'started' ? 'pulse' : ''} nowrap">${st(r.status).sym}</td>
-          <td class="nowrap"><div class="ctt"><a class="row-link" href="${href}"><b>${esc(r.repo)}</b></a> <code class="trunc-code">${esc(r.branch)}</code></div></td>
+          <td class="nowrap"><div class="ctt"><a class="row-link" href="${href}"><code>${esc(r.branch)}</code></a>${r.note ? ` <span class="mut small">${esc(r.note)}</span>` : ''}</div></td>
           <td class="mut small"><div class="ctt"><span class="shrink">${esc(r.headMsg || (head ? head.msg : ''))}</span></div></td>
           <td class="mut small nowrap">${esc(r.headAuthor || (head ? head.author : ''))}</td>
           <td class="r nowrap"><span class="dots">${r.pl
             ? r.pl.jobs.filter(P.isRunJob).slice(0, 5).map(j => VIEWS.jobDot(r.pl, j.name, r.headRef)).join('')
             : head.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span></td>
           <td class="mut small r nowrap">${ago(r.lastAt)}</td></tr>`;
-      }).join('')}</tbody></table></div>
-        ${vis.length > CAP ? `<div class="mut small pad-s">first ${CAP} of ${vis.length} — narrow with the filter</div>` : ''}
+      };
+      // searching or triaging: open the groups — the rows ARE the answer
+      const open = q || brChip === 'attention';
+      body = `<div class="ctoolbar">
+          <input data-filter aria-label="filter repos and branches" placeholder="filter repo, branch…  ( / )" value="${esc(brFilter)}" oninput="_brF(this.value)">
+          ${C('active', 'active')}${C('attention', '✕ needs attention')}${C('all', 'all')}
+          <span class="sp"></span>
+          <span class="mut small">${glist.length} repos · ${shownBranches} of ${rows.length} branches${!q && brChip === 'active' ? ' · quiet (no commit in 30d) hidden' : ''}</span>
+        </div>
+        ${glist.map(x => `<details class="b2-det inline-det pkg" data-det="br:${brChip}${q ? ':q' : ''}:${esc(x.repo)}" ${open ? 'open' : ''}>
+          <summary><span class="c-${x.worst} ${x.worst === 'started' ? 'pulse' : ''}">${st(x.worst).sym}</span> <b>${esc(x.repo)}</b>
+            <span class="mut small">${esc(x.team)} · ${x.g.length} branch${x.g.length === 1 ? '' : 'es'}${x.active !== x.g.length ? `, ${x.active} active` : ''}${x.red.length ? ` · <b class="c-failed">${x.red.length} red:</b> ${x.red.slice(0, 3).map(r => `<code>${esc(r.branch)}</code>`).join(' ')}${x.red.length > 3 ? ` +${x.red.length - 3}` : ''}` : ''} · ${ago(x.lastAt)}</span></summary>
+          <div class="tbl-scroll"><table class="tbl ctbl fixed">
+          <colgroup><col style="width:30px"><col style="width:220px"><col><col style="width:110px"><col style="width:96px"><col style="width:84px"></colgroup>
+          ${x.sorted.slice(0, CAPB).map(brRow).join('')}</table></div>
+          ${x.sorted.length > CAPB ? `<div class="mut small pad-s">first ${CAPB} of ${x.sorted.length} branches — narrow with the filter</div>` : ''}
+        </details>`).join('') || '<div class="mut pad">Nothing matches. Clear the filter or switch chips.</div>'}
         <p class="mut small">Every watched branch is its own pipeline (a git resource tracks one ref). Feature branches don't live here — they arrive as PRs.</p>`;
     } else if (tab === 'scheduled') {
       const pl = P.getPipeline('hello-world');
       if (!P.inTeam(pl)) return `<div class="page">
-        <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('branches', 'Branches')}${T('scheduled', 'Scheduled')}</div>
+        <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('repos', 'Repos')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
       body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
         ${pl.resources[0].versions.concat([{ id: { ref: new Date(D().now - 30 * 60e3).toISOString().slice(0, 16) + 'Z' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
@@ -246,7 +267,7 @@
     }
 
     return `<div class="page">
-      <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('branches', 'Branches')}${T('scheduled', 'Scheduled')}</div>
+      <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('repos', 'Repos')}${T('scheduled', 'Scheduled')}</div>
       ${body || '<div class="mut pad">No changes match. Clear the filter or switch tabs.</div>'}
     </div>`;
   };
@@ -255,9 +276,9 @@
   VIEWS.branchFeed = function (name) {
     const tabs = `<div class="tabs">
       <a class="tab" href="#/changes/mine">Mine</a><a class="tab" href="#/changes/open">Open PRs</a>
-      <a class="tab on" href="#/changes/branches">Branches</a><a class="tab" href="#/changes/scheduled">Scheduled</a></div>`;
+      <a class="tab on" href="#/changes/repos">Repos</a><a class="tab" href="#/changes/scheduled">Scheduled</a></div>`;
     const r = P.branchIndex().find(x => x.name === name);
-    if (!r) return `<div class="page">${tabs}<div class="mut pad">Branch not found — <a href="#/changes/branches">back to branches</a>.</div></div>`;
+    if (!r) return `<div class="page">${tabs}<div class="mut pad">Branch not found — <a href="#/changes/repos">back to repos</a>.</div></div>`;
     let feed;
     if (r.pl) {
       const res = r.pl.resources.find(x => x.name === r.pl.primaryContext.resource);
@@ -283,7 +304,7 @@
         <td class="mut small r nowrap">${ago(c.at)}</td></tr>`).join('');
     }
     return `<div class="page">${tabs}
-      <div class="meta"><a href="#/changes/branches">← branches</a> · <b>${esc(r.team)}/${esc(r.repo)}</b>
+      <div class="meta"><a href="#/changes/repos">← repos</a> · <b>${esc(r.team)}/${esc(r.repo)}</b>
         · branch <code>${esc(r.branch)}</code>${r.pl ? ` · <a href="#/p/${esc(r.pl.name)}/graph">pipeline →</a>` : ' · <span class="mut small">summary-only demo row — rich history exists for the hand-built branches</span>'}</div>
       <div class="tbl-scroll"><table class="tbl ctbl">
       <thead><tr><th></th><th>commit</th><th>author</th><th class="r">checks</th><th class="r">when</th></tr></thead>

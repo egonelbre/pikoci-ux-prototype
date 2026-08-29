@@ -84,9 +84,14 @@
       const lbl = pl.primaryContext.label;
       const r = pl.resources.find(x => x.name === pl.primaryContext.resource);
       const v = r && r.versions[0];
+      // fold deploy pipelines into their repo: checkout-staging is repo
+      // "checkout", branch main, variant "staging"
+      let repo = pl.name, note = null;
+      const m = pl.name.match(/^(.+)-(staging|prod)$/);
+      if (m) { repo = m[1]; note = m[2]; }
+      else if (pl.name.endsWith('-' + lbl)) repo = pl.name.slice(0, -lbl.length - 1);
       return {
-        name: pl.name, team: pl.team, pl,
-        repo: pl.name.endsWith('-' + lbl) ? pl.name.slice(0, -lbl.length - 1) : pl.name,
+        name: pl.name, team: pl.team, pl, repo, note,
         branch: lbl, status: primaryStatus(pl), lastAt: v ? (v.meta.at || 0) : 0,
         headRef: v ? v.id.ref : null, headMsg: v ? (v.meta.msg || '') : '', headAuthor: v ? (v.meta.author || '') : '',
       };
