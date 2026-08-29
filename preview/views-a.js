@@ -181,30 +181,54 @@
       }).join('')}
         </tbody>
       </table></div>`;
-    } else if (tab === 'trunk') {
-      const pl = P.getPipeline('pikoci');
-      if (!P.inTeam(pl)) return `<div class="page">
-        <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
-        <div class="mut pad">Trunk feeds follow each team's branch pipelines — the demo dataset only carries commit-level trunk data for <b>main/pikoci</b>. Pick “all teams” or “main” in the top bar.</div></div>`;
-      body = `<div class="tbl-scroll"><table class="tbl ctbl">
+    } else if (tab === 'branches') {
+      // every long-lived branch CI watches is its own branch-kind pipeline
+      // (a git resource tracks one ref) — this tab is their commit feed.
+      // Feature branches never appear here: they enter as PRs (Open PRs).
+      // With hundreds of branches the picker carries the load: ranked
+      // needs-attention first, then by latest commit.
+      const bpls = P.pipelines().filter(pl => pl.primaryContext.kind === 'branch');
+      const lastAt = pl => {
+        const r = pl.resources.find(x => x.name === pl.primaryContext.resource);
+        return r && r.versions[0] ? (r.versions[0].meta.at || 0) : 0;
+      };
+      // paused is deliberate quiet, not urgency — rank it near the back
+      // (RANK has no 'paused' entry; unranked would NaN the comparator)
+      const rank = pl => { const s = P.primaryStatus(pl); return s === 'paused' ? 6.5 : (P.RANK[s] !== undefined ? P.RANK[s] : 9); };
+      const sorted = bpls.slice().sort((a, b) => (rank(a) - rank(b)) || (lastAt(b) - lastAt(a)));
+      if (!sorted.length) return `<div class="page">
+        <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('branches', 'Branches')}${T('scheduled', 'Scheduled')}</div>
+        <div class="mut pad">No branch pipelines in this team's scope.</div></div>`;
+      const sel = (prN && sorted.find(pl => pl.name === prN)) || sorted[0];
+      const chips = sorted.map(pl => {
+        const s = P.primaryStatus(pl);
+        return `<a class="commit-chip ${pl === sel ? 'on' : ''}" href="#/changes/branches/${encodeURIComponent(pl.name)}"
+          title="${esc(pl.team)}/${esc(pl.name)} — ${st(s).label}">
+          <span class="c-${s}">${st(s).sym}</span> ${esc(pl.name)}</a>`;
+      }).join('');
+      const res = sel.resources.find(x => x.name === sel.primaryContext.resource);
+      body = `<div class="ctoolbar wrap" role="navigation" aria-label="branches, needs-attention first">${chips}</div>
+        <div class="meta"><b>${esc(sel.team)}/${esc(sel.name)}</b> · branch <code>${esc(sel.primaryContext.label)}</code>
+        · <a href="#/p/${esc(sel.name)}/graph">pipeline →</a></div>
+        <div class="tbl-scroll"><table class="tbl ctbl">
         <thead><tr><th></th><th>commit</th><th>author</th><th class="r">checks</th><th class="r">when</th></tr></thead><tbody>
-        ${pl.resources[0].versions.map(v => {
+        ${(res ? res.versions : []).map(v => {
         let worst = 'none';
-        for (const j of pl.jobs) {
-          const c = P.jobCell(pl, j.name, v.id.ref);
+        for (const j of sel.jobs) {
+          const c = P.jobCell(sel, j.name, v.id.ref);
           if (c.kind === 'build' && P.RANK[c.status] < P.RANK[worst]) worst = c.status;
         }
         return `<tr>
           <td class="c-${worst} ${worst === 'started' ? 'pulse' : ''}">${st(worst).sym}</td>
           <td class="ct-title" title="${esc(v.meta.msg || '')}"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="shrink">${esc(v.meta.msg || '')}</span></div></td>
           <td class="mut nowrap">${esc(v.meta.author || '')}</td>
-          <td class="r nowrap"><span class="dots">${pl.jobs.filter(P.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
+          <td class="r nowrap"><span class="dots">${sel.jobs.filter(P.isRunJob).map(j => VIEWS.jobDot(sel, j.name, v.id.ref)).join('')}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
     } else if (tab === 'scheduled') {
       const pl = P.getPipeline('hello-world');
       if (!P.inTeam(pl)) return `<div class="page">
-        <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
+        <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('branches', 'Branches')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
       body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
         ${pl.resources[0].versions.concat([{ id: { ref: new Date(D().now - 30 * 60e3).toISOString().slice(0, 16) + 'Z' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
@@ -215,7 +239,7 @@
     }
 
     return `<div class="page">
-      <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
+      <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('branches', 'Branches')}${T('scheduled', 'Scheduled')}</div>
       ${body || '<div class="mut pad">No changes match. Clear the filter or switch tabs.</div>'}
     </div>`;
   };
