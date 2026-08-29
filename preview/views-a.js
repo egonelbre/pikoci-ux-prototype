@@ -236,8 +236,9 @@
             : head.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span></td>
           <td class="mut small r nowrap">${ago(r.lastAt)}</td></tr>`;
       };
-      // searching or triaging: open the groups — the rows ARE the answer
-      const open = q || brChip === 'attention';
+      // groups render open — the roll-up line is for scanning, not gating;
+      // collapsing is the user's choice and sticks per mode (data-det)
+      const open = true;
       body = `<div class="ctoolbar">
           <input data-filter aria-label="filter repos and branches" placeholder="filter repo, branch…  ( / )" value="${esc(brFilter)}" oninput="_brF(this.value)">
           ${C('active', 'active')}${C('attention', '✕ needs attention')}${C('all', 'all')}
