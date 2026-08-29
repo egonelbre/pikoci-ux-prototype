@@ -13,7 +13,7 @@
     started: { color: 'var(--run)', sym: '●', label: 'running' },
     pending: { color: 'var(--pend)', sym: '○', label: 'pending' },
     cancelled: { color: 'var(--cancel)', sym: '⊘', label: 'cancelled' },
-    warning: { color: 'var(--warn)', sym: '✓', label: 'passed (allowed failure)' },
+    warning: { color: 'var(--warn)', sym: '!', label: 'passed (allowed failure)' }, // own glyph — never color-only vs ✓ (WCAG 1.4.1)
     skipped: { color: 'var(--pend)', sym: '◇', label: 'branch not taken' },
     waiting_for_approval: { color: 'var(--appr)', sym: '⧖', label: 'needs approval' },
     held: { color: 'var(--appr)', sym: '⛔', label: 'held' },
@@ -58,10 +58,10 @@
     d = Math.round(d / 60); if (d < 24) return d + 'h ago';
     return Math.round(d / 24) + 'd ago';
   };
-  const bDur = b => b.end ? (b.end - b.start) / 1000 : (b.status === 'started' ? (Date.now() - b.start) / 1000 : null);
+  const bDur = b => b.end ? Math.max(0, b.end - b.start) / 1000 : (b.status === 'started' ? (Date.now() - b.start) / 1000 : null);
   const lastOutputAge = b => {
-    if (b.status !== 'started') return null;
-    return b._lastOutput ? Math.round((Date.now() - b._lastOutput) / 1000) : Math.round((Date.now() - b.start) / 1000);
+    if (b.status !== 'started' || !b._lastOutput) return null; // unknown ≠ stalled
+    return Math.round((Date.now() - b._lastOutput) / 1000);
   };
 
   // ---------- queries -------------------------------------------------------
@@ -308,7 +308,7 @@
   }
   const gatedEmpty = { // teaching empty states for gated-off URLs (R2-13)
     insights: ['Insights is not built yet.', 'When it ships (Phase 4) and this install has ~200 builds, this page will show duration trends, the flake board (pass-after-retry), queue times, and stale escape hatches. Until then this URL stays reachable — deep links never 404 because of gating.'],
-    changes: ['No change metadata yet.', 'The Changes view appears when version metadata enrichment (K3) provides commit messages, authors, and PR fields. Until then, each pipeline has a Versions tab.'],
+    changes: ['No change metadata yet.', 'The Changes view appears when version metadata enrichment provides commit messages, authors, and PR fields. Until then, each pipeline has a Versions tab.'],
     environments: ['No deploy targets declared.', 'Declare an environment on a deploy job and this page will show what version is live where, with verification state and guided rollback.'],
     queue: ['Single-worker install.', 'Queue appears with a second worker (or any stuck build) — on one worker, jobs either run or wait for that worker. It answers "when does my job start, and how big is the workload?" honestly: matching capacity per tag, no fake ETAs.'],
     workers: ['Single-worker install.', 'Workers appears with a second worker (or any stuck build). The one worker is always reachable from Settings — a solo operator still needs drain, upgrade, and registration.'],
@@ -319,14 +319,14 @@
   const done = new Set(); // idempotency keys
   function toast(msg, kind) {
     let t = document.getElementById('toast');
-    if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
     t.textContent = msg; t.className = 'show' + (kind ? ' ' + kind : '');
-    clearTimeout(t._h); t._h = setTimeout(() => t.className = '', 3000);
+    clearTimeout(t._h); t._h = setTimeout(() => t.className = '', 5000);
   }
   const ACT = {
     approve(id) {
       const key = 'approve:' + id;
-      if (done.has(key)) return toast('Already approved by egon just now — no double vote (idempotent)', 'info');
+      if (done.has(key)) return toast('Already approved — one vote per person', 'info');
       done.add(key);
       const b = getBuild(id); if (!b) return;
       b.status = 'started'; b.start = Date.now(); b._lastOutput = Date.now();
@@ -348,7 +348,7 @@
     },
     reject(id) {
       const key = 'gate:' + id; // approve/reject share a gate key — first write wins
-      if (done.has('approve:' + id) || done.has(key)) return toast('Gate already decided — first write wins (C11)', 'info');
+      if (done.has('approve:' + id) || done.has(key)) return toast('Already decided — the first response counted', 'info');
       done.add(key);
       const b = getBuild(id); if (!b) return;
       b.status = 'failed'; b.end = Date.now();
@@ -395,7 +395,7 @@
     },
     cancel(id) {
       const key = 'cancel:' + id;
-      if (done.has(key)) return toast('Already cancelled by egon just now (idempotent)', 'info');
+      if (done.has(key)) return toast('Already cancelled', 'info');
       done.add(key);
       const b = getBuild(id); if (!b) return;
       b.status = 'cancelled'; b.end = Date.now();
@@ -424,7 +424,7 @@
     check(arg) { toast('Checking ' + arg.split('|')[1] + '…'); },
     snooze(key) {
       App.session.snoozed.add(key);
-      toast('Snoozed for this session (stored snooze with expiry lands with K17b)', 'info'); App.refresh();
+      toast('Snoozed for this session', 'info'); App.refresh();
     },
     rollback(env) {
       const e = D().environments.find(x => x.name === env);
@@ -473,14 +473,28 @@
   function renderPalette() {
     let el = document.getElementById('palette');
     if (!el) { el = document.createElement('div'); el.id = 'palette'; document.body.appendChild(el); }
-    if (!Pal.open) { el.innerHTML = ''; return; }
+    const app = ['hdr', 'main'].map(id => document.getElementById(id));
+    if (!Pal.open) {
+      el.innerHTML = '';
+      app.forEach(x => x && x.removeAttribute('inert'));
+      // hand focus back to where ⌘K makes sense to return
+      const back = document.querySelector('[data-palette-btn]');
+      if (Pal._hadFocus && back) back.focus({ preventScroll: true });
+      Pal._hadFocus = false;
+      return;
+    }
+    Pal._hadFocus = true;
+    app.forEach(x => x && x.setAttribute('inert', '')); // contain focus in the dialog
     const q = Pal.q.toLowerCase();
     const items = paletteItems().filter(i => !q || i.label.toLowerCase().includes(q)).slice(0, 9);
     if (Pal.sel >= items.length) Pal.sel = Math.max(0, items.length - 1);
-    el.innerHTML = `<div class="pal-back"><div class="pal-box" role="dialog" aria-label="command palette">
-      <input id="palin" placeholder="Jump to pipeline / change, or run an action…" value="${esc(Pal.q)}" aria-label="search">
-      ${items.map((it, i) => `<div class="pal-row ${i === Pal.sel ? 'sel' : ''}" data-pal="${i}">${esc(it.label)}<span class="pal-k">${it.kind}</span></div>`).join('')}
+    el.innerHTML = `<div class="pal-back"><div class="pal-box" role="dialog" aria-modal="true" aria-label="command palette">
+      <input id="palin" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-activedescendant="pal-${Pal.sel}"
+        placeholder="Jump to pipeline / change, or run an action…" value="${esc(Pal.q)}" aria-label="search commands">
+      <div id="pal-list" role="listbox" aria-label="results">
+      ${items.map((it, i) => `<div class="pal-row ${i === Pal.sel ? 'sel' : ''}" id="pal-${i}" role="option" aria-selected="${i === Pal.sel}" data-pal="${i}">${esc(it.label)}<span class="pal-k">${it.kind}</span></div>`).join('')}
       ${!items.length ? '<div class="pal-row mut">no matches</div>' : ''}
+      </div>
     </div></div>`;
     el.querySelector('.pal-back').onclick = ev => { if (ev.target.classList.contains('pal-back')) { Pal.open = false; renderPalette(); } };
     el.querySelectorAll('[data-pal]').forEach(r => r.onclick = () => { const it = items[+r.getAttribute('data-pal')]; Pal.open = false; renderPalette(); it && it.run(); });
@@ -497,6 +511,13 @@
   document.addEventListener('keydown', e => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') { Pal.open = !Pal.open; Pal.q = ''; renderPalette(); e.preventDefault(); return; }
     if (Pal.open || ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
+    if (e.key === 'Escape') { // dismiss open reason popovers
+      document.querySelectorAll('.reason-detail:not([hidden])').forEach(p => {
+        p.hidden = true;
+        const btn = p.previousElementSibling;
+        if (btn && btn.setAttribute) { btn.setAttribute('aria-expanded', 'false'); btn.focus(); }
+      });
+    }
     if (e.key === '/') { const f = document.querySelector('[data-filter]'); if (f) { f.focus(); e.preventDefault(); } }
     if (e.key === 'f') {
       const errs = [...document.querySelectorAll('.l-err')];
@@ -541,10 +562,19 @@
       document.querySelectorAll('[data-fold]').forEach(el => { folds[el.getAttribute('data-fold')] = el.hidden; });
       const dets = {};
       document.querySelectorAll('details[data-det]').forEach(el => { dets[el.getAttribute('data-det')] = el.open; });
-      const refocus = document.activeElement && document.activeElement.hasAttribute
-        && document.activeElement.hasAttribute('data-filter');
+      // focus identity survives the innerHTML rebuild: match by data-filter,
+      // then data-act(+arg), then id, then href (a11y: live pages tick every 2–5s)
+      const ae = document.activeElement;
+      let aeSel = null, refocus = false;
+      if (ae && ae !== document.body) {
+        if (ae.hasAttribute && ae.hasAttribute('data-filter')) refocus = true;
+        else if (ae.dataset && ae.dataset.act) aeSel = `[data-act="${ae.dataset.act}"]` + (ae.dataset.arg ? `[data-arg="${(window.CSS && CSS.escape ? CSS.escape(ae.dataset.arg) : ae.dataset.arg)}"]` : '');
+        else if (ae.id) aeSel = '#' + (window.CSS && CSS.escape ? CSS.escape(ae.id) : ae.id);
+        else if (ae.getAttribute && ae.getAttribute('href')) aeSel = `a[href="${ae.getAttribute('href')}"]`;
+      }
       const wy = window.scrollY;
       App._render(App.route());
+      if (aeSel) { try { const el = document.querySelector(aeSel); if (el) el.focus({ preventScroll: true }); } catch (e) { /* selector edge */ } }
       document.querySelectorAll('[data-fold]').forEach(el => {
         const k = el.getAttribute('data-fold');
         if (k in folds) {
@@ -564,7 +594,14 @@
     },
     start(render) {
       App._render = render;
-      window.addEventListener('hashchange', () => App.refresh());
+      window.addEventListener('hashchange', () => {
+        App.refresh();
+        // announce navigation: title + move focus into the new view (SR users)
+        const h = location.hash.replace(/^#\/?/, '');
+        document.title = 'PikoCI — ' + (h ? h.split('/').slice(0, 2).join(' / ') : 'home');
+        const m = document.getElementById('main');
+        if (m) { m.tabIndex = -1; m.focus({ preventScroll: true }); }
+      });
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
         document.documentElement.setAttribute('data-theme', 'dark');
       App.refresh();
@@ -575,7 +612,7 @@
 
   function setTeam(t) {
     App.session.team = t;
-    toast(t ? 'Scoped to team ' + t + ' — every page filters (pipelines, attention, changes, environments, ops, audit)' : 'Showing all teams', 'info');
+    toast(t ? 'Showing team ' + t + ' only' : 'Showing all teams', 'info');
     App.refresh();
   }
 

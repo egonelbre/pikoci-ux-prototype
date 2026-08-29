@@ -26,7 +26,7 @@
       ${attn.items.length ? `<a href="#/" class="attn-badge" title="items needing you">${attn.items.length}</a>` : ''}
       <span class="sp"></span>
       <button class="ghost" data-act="theme" title="toggle theme">◐</button>
-      <button class="ghost" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true}))">⌘K</button>
+      <button class="ghost" data-palette-btn aria-label="open command palette" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true}))">⌘K</button>
       <a class="${sec === 'settings' ? 'on' : ''}" href="#/settings">egon ⚙</a>
     </header>`;
   };
@@ -36,7 +36,8 @@
     const id = 'r-' + Math.random().toString(36).slice(2, 8);
     const key = 'rsn:' + [d.pipeline, d.job, d.ref, d.code, ctx || ''].join('|');
     const fam = P.REASON[d.code] ? P.REASON[d.code].family : 'waiting';
-    return `<span class="reason-wrap"><button class="reason ${fam}" aria-expanded="false"
+    return `<span class="reason-wrap"><button class="reason ${fam}" aria-expanded="false" aria-controls="${id}"
+      aria-label="${esc(reasonLabel(d))}"
       onclick="event.stopPropagation();const p=document.getElementById('${id}');const open=p.hidden;p.hidden=!open;this.setAttribute('aria-expanded',open)"
       title="${esc(reasonLabel(d))}">${fam === 'waiting' ? '…' : '∅'}</button>
       <span id="${id}" hidden data-fold="${esc(key)}" class="reason-detail"><b>${esc(reasonLabel(d))}</b> — ${esc(d.text)}${ctx ? ' · ' + esc(ctx) : ''}</span></span>`;
@@ -104,7 +105,6 @@
       ${strip}
       ${notShown.length ? `<div class="not-shown">▸ ${notShown.length} failing PR${notShown.length > 1 ? 's' : ''} not shown here: ${notShown.slice(0, 3).map(l => `<a href="#/changes/pr/${l.n}">#${l.n}</a> (${esc(l.author)}${l.draft ? ', draft' : ''})`).join(', ')}${notShown.length > 3 ? ` and <a href="#/changes/open">${notShown.length - 3} more</a>` : ''} — their failure, their inbox.</div>` : ''}
       ${cards}
-      <p class="mut small">Cards are colored by each pipeline's <b>primary context</b> only — a failing community PR never turns a card red; it shows as a count and, when it's yours, an attention item.</p>
     </div>`;
   };
 
@@ -145,13 +145,13 @@
       const chip = (k, lbl) => `<button class="chip-btn ${chgChip === k ? 'on' : ''}" onclick="_chgC('${k}')">${lbl}</button>`;
       body = `
       <div class="ctoolbar">
-        <input data-filter placeholder="filter #, title, author, branch, repo…  ( / )" value="${esc(chgFilter)}" oninput="_chgF(this.value)">
+        <input data-filter aria-label="filter changes" placeholder="filter #, title, author, branch, repo…  ( / )" value="${esc(chgFilter)}" oninput="_chgF(this.value)">
         ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● running')}${chip('held', '⛔ held')}${chip('drafts', 'drafts')}
         <label class="small mut"><input type="checkbox" ${chgBots ? 'checked' : ''} onchange="_chgB()"> bots</label>
         <span class="sp"></span>
         <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${P.team() ? ' in ' + esc(P.team()) : ''}</span>
       </div>
-      <table class="tbl ctbl">
+      <div class="tbl-scroll"><table class="tbl ctbl">
         <thead><tr><th></th><th>PR</th><th>repo</th><th>author</th><th>branch @ head</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
         <tbody>
         ${shown.map(l => {
@@ -163,7 +163,7 @@
         const old = l.changes.filter(c => c.superseded).length;
         return `<tr class="${P.mine(l) ? 'mine-row' : ''}" onclick="location.hash='#/changes/pr/${l.n}'">
           <td class="c-${isHeld ? 'held' : s} ${s === 'started' ? 'pulse' : ''}">${isHeld ? '⛔' : st(s).sym}</td>
-          <td class="ct-title"><b>#${l.n}</b> ${esc(l.title)}
+          <td class="ct-title"><a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
             ${l.draft ? '<span class="chip">draft</span>' : ''}${l.fork ? '<span class="chip">fork</span>' : ''}
             ${isHeld ? '<span class="badge held-badge">held</span>' : ''}
             ${P.mine(l) ? '<span class="chip mine-chip">yours</span>' : ''}
@@ -179,13 +179,13 @@
         </tr>`;
       }).join('')}
         </tbody>
-      </table>`;
+      </table></div>`;
     } else if (tab === 'trunk') {
       const pl = P.getPipeline('pikoci');
       if (!P.inTeam(pl)) return `<div class="page">
         <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Trunk feeds follow each team's branch pipelines — the demo dataset only carries commit-level trunk data for <b>main/pikoci</b>. Pick “all teams” or “main” in the top bar.</div></div>`;
-      body = `<table class="tbl ctbl">
+      body = `<div class="tbl-scroll"><table class="tbl ctbl">
         <thead><tr><th></th><th>commit</th><th>author</th><th class="r">checks</th><th class="r">when</th></tr></thead><tbody>
         ${pl.resources[0].versions.map(v => {
         let worst = 'none';
@@ -199,23 +199,23 @@
           <td class="mut nowrap">${esc(v.meta.author || '')}</td>
           <td class="r nowrap"><span class="dots">${pl.jobs.filter(j => !j.cadence).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`;
-      }).join('')}</tbody></table>`;
+      }).join('')}</tbody></table></div>`;
     } else if (tab === 'scheduled') {
       const pl = P.getPipeline('hello-world');
       if (!P.inTeam(pl)) return `<div class="page">
         <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
-      body = `<table class="tbl ctbl"><tbody>
+      body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
         ${pl.resources[0].versions.concat([{ id: { ref: 'tick-208' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
           <td>⏱</td><td class="ct-title"><code>${esc(v.id.ref)}</code> <span class="mut">cron.every-10m · oss/hello-world</span></td>
           <td></td><td class="r"><span class="dots">${VIEWS.jobDot(pl, 'gen', v.id.ref)}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`).join('')}
-      </tbody></table>`;
+      </tbody></table></div>`;
     }
 
     return `<div class="page">
       <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
-      ${body || '<div class="mut pad">nothing here</div>'}
+      ${body || '<div class="mut pad">No changes match. Clear the filter or switch tabs.</div>'}
     </div>`;
   };
 
@@ -239,7 +239,7 @@
       const cmp = P.compareWithLastGreen(b);
       const blocked = cells.filter(x => x.c.kind === 'decision' && x.c.decision.code === 'upstream').map(x => x.j.name);
       return `<div class="verdict fail">
-        <div class="v-head">✕ <b>Blocked — ${esc(b.job)} failed</b> on <code>${esc(ref)}</code>
+        <div class="v-head">✕ <b>${esc(b.job)} failed</b> on <code>${esc(ref)}</code>
           <span class="sp"></span>
           <a class="btn sm" href="#/b/${b.id}">Full log</a>
           <button class="btn sm primary" data-act="retry" data-arg="${b.id}">↻ Retry</button></div>
@@ -258,10 +258,13 @@
     const withB = cells.filter(x => x.c.kind === 'build');
     if (withB.length && withB.every(x => x.c.status === 'succeeded') && withB.length === cells.length)
       return `<div class="verdict ok">✓ <b>All ${cells.length} checks passed</b> on <code>${esc(ref)}</code>.</div>`;
-    if (!withB.length) return `<div class="verdict none">Checks for this change ran on its forge — this demo lineage carries only a summary. Status: <span class="c-${P.lineageStatus(l)}">${st(P.lineageStatus(l)).label}</span>.</div>`;
-    return `<div class="verdict ${withB.every(x => x.c.status === 'succeeded') ? 'ok' : 'run'}">
-      ${withB.every(x => x.c.status === 'succeeded') ? '✓' : '·'} <b>${withB.filter(x => x.c.status === 'succeeded').length} of ${cells.length} checks green</b> —
-      ${cells.filter(x => x.c.kind !== 'build').map(x => `${esc(x.j.name)}: ${x.c.kind === 'decision' ? esc(reasonLabel(x.c.decision)) : 'no build'}`).join(' · ')}</div>`;
+    if (!withB.length) {
+      if (l.summary) return `<div class="verdict none">Checks for this change ran on its forge — this demo lineage carries only a summary. Status: <span class="c-${P.lineageStatus(l)}">${st(P.lineageStatus(l)).label}</span>.</div>`;
+      return `<div class="verdict run">· Checks haven't started for <code>${esc(ref)}</code> yet.</div>`;
+    }
+    return `<div class="verdict run">
+      · <b>${withB.filter(x => x.c.status === 'succeeded').length} of ${cells.length} checks green</b> —
+      ${cells.filter(x => x.c.kind !== 'build').map(x => `${esc(x.j.name)}: ${x.c.kind === 'decision' ? esc(reasonLabel(x.c.decision)) : 'not started'}`).join(' · ')}</div>`;
   }
 
   VIEWS.prDetail = function (n) {
@@ -282,14 +285,20 @@
         ${l.changes.map(c => `<span class="commit-chip ${c.id.ref === head.id.ref ? 'on' : ''} ${c.superseded ? 'sup' : ''}">${esc(c.id.ref)}${c.superseded ? ' (superseded)' : ''}</span>`).join('')}
         — every row below is scoped to this one commit</div>
       ${prVerdict(l, pl, head, held)}
-      ${VIEWS.runTimeline(pl, head.id.ref)}
+      ${l.summary && !D().builds.some(b => b.pipeline === pl.name && Object.values(b.intent.versions)[0] === head.id.ref)
+        ? `<div class="tbl-scroll"><table class="tbl ctbl">${pl.jobs.filter(j => !j.cadence).map((j, i) => `<tr>
+            <td width="26">${VIEWS.dotStatic(l.summary[i] || 'none', j.name)}</td>
+            <td><b>${esc(j.name)}</b></td>
+            <td class="mut small r">${st(l.summary[i] || 'none').label}</td>
+          </tr>`).join('')}</table></div>`
+        : VIEWS.runTimeline(pl, head.id.ref)}
       ${arts.length ? `<h3>Artifacts <span class="mut small">— produced by this commit's builds</span></h3>
-        <table class="tbl ctbl wtbl">${arts.flatMap(b => b.artifacts.map(a => `<tr>
-          <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download (K8: served from the worker until artifact storage lands)">${esc(a.name)}</a></td>
+        <div class="tbl-scroll"><table class="tbl ctbl wtbl">${arts.flatMap(b => b.artifacts.map(a => `<tr>
+          <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a></td>
           <td class="mut small nowrap">${esc(a.size)}</td>
           <td class="mut small">from <a href="#/b/${b.id}">${esc(b.job)} #${b.n}</a></td>
-          <td class="mut small r">worker-local · retention per K8</td>
-        </tr>`)).join('')}</table>` : ''}
+          <td class="mut small r">worker-local · retention pending</td>
+        </tr>`)).join('')}</table></div>` : ''}
       <details class="b2-det inline-det" data-det="prg:${l.n}" open><summary>pipeline graph</summary>
         ${VIEWS.runGraph(pl, head.id.ref)}</details>
       ${l.changes.filter(c => c.superseded).length ? `<h3>Superseded commits</h3>
@@ -350,12 +359,14 @@
         fill = 'var(--mut3)';
       } else { timing = '—'; fill = 'var(--mut3)'; }
       const pulse = c.kind === 'build' && c.build.status === 'started' ? 'pulse' : '';
-      nodes += `<g class="gnode ${pulse}" ${click}>
+      const g = `<g class="gnode ${pulse}">
         <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="5" fill="${fill}"/>
         <text x="${p.x + 8}" y="${p.y + 15}" class="t-job" style="font-size:11px">${esc(j.name)}</text>
         <text x="${p.x + 8}" y="${p.y + 28}" class="t-sub">${esc(timing)}</text></g>`;
+      // real SVG link: focusable, Enter works, exposed to AT (not a mute onclick <g>)
+      nodes += c.kind === 'build' ? `<a href="#/b/${c.build.id}" aria-label="${esc(j.name)}: ${esc(timing)}">${g}</a>` : g;
     }
-    return `<div class="run-graph" data-live><svg width="${W}" height="${H}" role="img" aria-label="run graph">${edges}${nodes}</svg></div>`;
+    return `<div class="run-graph" data-live><svg width="${W}" height="${H}" aria-label="run graph">${edges}${nodes}</svg></div>`;
   };
 
   // ---------- run timeline: checks table + waterfall + DAG in ONE view ------
@@ -429,12 +440,12 @@
         .filter(u => u && u.c.kind === 'build' && u.c.build.end).map(u => endOf(u.c.build));
       return `<div class="wf-row">
         <div class="wf-lbl"><span class="mut">·</span>${name}</div>
-        <div class="wf-lane">${gridLines}<span class="wf-ghost" style="left:${ghostX.length ? Math.max(...ghostX) : 2}%">
+        <div class="wf-lane">${gridLines}<span class="wf-ghost" style="left:${ghostX.length ? Math.min(Math.max(...ghostX), 78).toFixed(1) : 2}%">
           ${c.kind === 'decision' ? `${P.REASON[c.decision.code] && P.REASON[c.decision.code].family === 'wont_run' ? '∅' : '…'} ${esc(reasonLabel(c.decision))}` : 'no build'}</span></div>
       </div>`;
     }).join('')}
       </div>
-      ${timed.length ? `<div class="mut small wf-note">wall clock <b>${fmtDur(wall)}</b> · job time <b>${fmtDur(busy)}</b> — the gap is parallelism; a queued bar stretching right is capacity, not code. Vertical lines are dependencies; click a bar or #N for the build.</div>` : ''}
+      ${timed.length ? `<div class="mut small wf-note">wall clock <b>${fmtDur(wall)}</b> · job time <b>${fmtDur(busy)}</b> · vertical lines mark dependencies</div>` : ''}
     </div>`;
   };
 
@@ -461,7 +472,7 @@
     const chip = (k, lbl) => `<button class="chip-btn ${envChip === k ? 'on' : ''}" onclick="_envC('${k}')">${lbl}</button>`;
     const row = e => `<tr onclick="location.hash='#/environments/${encodeURIComponent(e.name)}'">
           <td>${e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>'}</td>
-          <td class="ct-title"><b>${esc(e.name)}</b>
+          <td class="ct-title"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
             ${e.drift ? '<span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : '<span class="chip">verifying…</span>'}</td>
           <td class="mut small nowrap">${esc(e.pipeline)} · ${esc(e.job)}</td>
           <td><code>${esc(e.version)}</code></td>
@@ -478,17 +489,16 @@
       : sorted(envs).map(row).join('');
     return `<div class="page"><h1>Environments <span class="mut small">${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span></h1>
       <div class="ctoolbar">
-        <input data-filter placeholder="filter name, pipeline, version…  ( / )" value="${esc(envFilter)}" oninput="_envF(this.value)">
+        <input data-filter aria-label="filter environments" placeholder="filter name, pipeline, version…  ( / )" value="${esc(envFilter)}" oninput="_envF(this.value)">
         ${chip('all', 'all')}${chip('attention', `⚠ needs attention${attn ? ' · ' + attn : ''}`)}${chip('drift', '⚠ drift')}${chip('verifying', '● verifying')}
         <span class="sp"></span>
         <span class="mut small">${envs.length} of ${total}</span>
       </div>
       ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(P.team())}'s pipelines.</div>`)}
-      <table class="tbl ctbl">
+      <div class="tbl-scroll"><table class="tbl ctbl">
         <thead><tr><th></th><th>environment</th><th>pipeline</th><th>live version</th><th>deployed</th><th class="r"></th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>
-      <p class="mut small">The Environments section exists because every journey that matters in an incident — "what is live?", C4 rollback, E7 drift — needs one place to stand. Click a row for its page.</p>
+      </table></div>
     </div>`;
   };
 
@@ -509,10 +519,10 @@
           <div style="font-size:20px"><code>${esc(e.version)}</code></div>
           <div class="mut small gap-s">deployed ${ago(e.deployedAt)} · build ${esc(e.byBuild)} · by ${esc(e.by)}
             ${e.verified ? ' · post-deploy verification passed' : ' · post-deploy verification still running'}</div>
-          <div class="mut small">rollback is guided: trigger-with-version + pin, confirmed, audited (K17)</div>
+          <div class="mut small">rollback is guided: trigger-with-version + pin, confirmed, audited</div>
         </div></section>
       <section class="panel"><div class="panel-head"><b>History</b><span class="mut small">newest first</span></div>
-        <table class="tbl ctbl">
+        <div class="tbl-scroll"><table class="tbl ctbl">
         ${e.history.map((h, i) => `<tr>
           <td width="24">${h.ok ? '<span class="c-succeeded">✓</span>' : '<span class="c-failed">✕</span>'}</td>
           <td><code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}</td>
@@ -520,7 +530,7 @@
           <td class="mut small nowrap r">${ago(h.at)}</td>
           <td class="r">${i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : ''}</td>
         </tr>`).join('')}
-        </table></section>
+        </table></div></section>
     </div>`;
   };
 

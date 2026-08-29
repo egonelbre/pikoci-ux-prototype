@@ -40,7 +40,7 @@ h3 { font-size: 13px; margin: 14px 0 6px; color: var(--mut); text-transform: upp
 .pulse { animation: pulse 1.3s ease-in-out infinite; }
 
 /* header */
-header { display: flex; align-items: center; gap: 14px; padding: 9px 18px; background: var(--bg1); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+header { flex-wrap: wrap; row-gap: 4px; display: flex; align-items: center; gap: 14px; padding: 9px 18px; background: var(--bg1); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
 header .logo { font-weight: 700; color: var(--fg); }
 .preview-tag { font-size: 10px; color: var(--mut); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; vertical-align: 2px; }
 header nav { display: flex; gap: 12px; }
@@ -115,7 +115,7 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 /* changes: dense table */
 .ctoolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 .ctoolbar [data-filter] { flex: 0 1 280px; min-width: 160px; background: var(--bg1); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); padding: 4px 10px; font: inherit; font-size: 13px; }
-.ctoolbar [data-filter]:focus { outline: none; border-color: var(--accent); }
+.ctoolbar [data-filter]:focus-visible { border-color: var(--accent); }
 .ctoolbar label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; user-select: none; }
 .chip-btn { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; background: var(--bg1); color: var(--mut); cursor: pointer; }
 .chip-btn:hover { border-color: var(--mut); color: var(--fg); }
@@ -150,7 +150,7 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .b2-sec { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); padding: 12px 12px 4px; }
 .b2-grp { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--mut); padding: 6px 12px 2px 18px; }
 .jrow { display: flex; gap: 8px; align-items: center; padding: 4px 12px; font-size: 13px; color: var(--fg); text-decoration: none; cursor: pointer; }
-.jrow > span:first-child { width: 16px; flex: none; text-align: center; }
+.jrow > span:first-child:not(.reason-wrap) { width: 16px; flex: none; text-align: center; }
 .jrow:hover { background: var(--bg2); }
 .jrow.on { background: var(--bg2); font-weight: 600; box-shadow: inset 3px 0 var(--accent); }
 .jrow .jname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -158,7 +158,7 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .jrow.st { padding-left: 18px; }
 .b2-back { border-bottom: 1px solid var(--line2); padding-top: 8px; padding-bottom: 8px; color: var(--accent); }
 .b2-back .jname { color: var(--fg); }
-.jrow.st .type { width: 34px; text-transform: uppercase; font-size: 10px; }
+.jrow.st .type { width: 48px; flex: none; text-transform: uppercase; font-size: 10px; }
 .b2-hist { padding: 2px 12px 6px; font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; }
 .b2-det { padding: 6px 12px; font-size: 12px; color: var(--mut); border-top: 1px solid var(--line2); }
 .b2-det summary { cursor: pointer; font-weight: 600; }
@@ -194,7 +194,7 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .disk-bar span { display: block; height: 100%; }
 /* team scope */
 .team-sel { font: inherit; font-size: 13px; background: var(--bg1); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; margin: 0 4px 0 10px; max-width: 130px; }
-.team-sel:focus { outline: none; border-color: var(--accent); }
+.team-sel:focus-visible { border-color: var(--accent); }
 .team-head { font-size: 13px; font-weight: 600; color: var(--mut); margin: 20px 0 8px; display: flex; gap: 8px; align-items: baseline; }
 .team-head:first-child, h1 + .team-head { margin-top: 6px; }
 .ctx-banner { background: var(--bg2); border-radius: 8px; padding: 7px 12px; font-size: 13px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -217,11 +217,12 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 /* waterfall */
 .wf { background: var(--bg1); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
 .wf-row { display: flex; align-items: center; height: 28px; gap: 10px; }
-.wf-lbl { width: 300px; flex: none; display: flex; gap: 7px; align-items: center; font-size: 13px; }
+:root { --wf-lbl: clamp(170px, 30vw, 300px); }
+.wf-lbl { width: var(--wf-lbl); flex: none; display: flex; gap: 7px; align-items: center; font-size: 13px; }
 .wf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-n { width: 40px; flex: none; text-align: right; }
 .wf-d { width: 52px; flex: none; text-align: right; white-space: nowrap; }
-.wf-lane { flex: 1; position: relative; height: 100%; border-left: 1px solid var(--line2); }
+.wf-lane { flex: 1; position: relative; height: 100%; border-left: 1px solid var(--line2); overflow: hidden; }
 .wf-bar { position: absolute; top: 7px; height: 14px; border-radius: 4px; cursor: pointer; min-width: 8px; }
 .wf-bar:hover { outline: 2px solid var(--fg); }
 .wf-dur { width: 64px; flex: none; text-align: right; }
@@ -230,12 +231,12 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .wf-axis { height: 18px; }
 .wf-axis .wf-lane { border-left: none; }
 .wf-body { position: relative; }
-.wf-deps { position: absolute; top: -18px; left: calc(300px + 10px); right: 0; bottom: 0; pointer-events: none; }
+.wf-deps { position: absolute; top: -18px; left: calc(var(--wf-lbl) + 10px); right: 0; bottom: 0; pointer-events: none; }
 .wf-dep { position: absolute; border-left: 1.5px dashed var(--mut3); }
 .wf-link { width: 60px; flex: none; text-align: right; }
 .wf-lbl.click { cursor: pointer; }
 .wf-lbl.click:hover .wf-name { text-decoration: underline; }
-.wf-ghost { position: absolute; top: 5px; font-size: 12px; color: var(--mut); white-space: nowrap; border: 1px dashed var(--line); border-radius: 10px; padding: 0 8px; background: var(--bg1); }
+.wf-ghost { position: absolute; top: 5px; font-size: 12px; color: var(--mut); white-space: nowrap; border: 1px dashed var(--line); border-radius: 10px; padding: 0 8px; background: var(--bg1); max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
 /* verdict strip: what's blocking, said in words, with the evidence inline */
 .verdict { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; background: var(--bg1); padding: 10px 14px; margin-bottom: 12px; }
 .verdict .v-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -298,3 +299,50 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(90px); background: var(--fg); color: var(--bg1); padding: 9px 16px; border-radius: 8px; font-size: 13px; transition: transform .2s; z-index: 99; max-width: 80vw; }
 #toast.show { transform: translateX(-50%) translateY(0); }
 #toast.info { background: var(--accent); color: #fff; }
+
+/* ---------- skill-review batch: layout / a11y / contrast ---------- */
+/* tables scroll in their own container, never the page */
+.tbl-scroll { overflow-x: auto; margin-bottom: 10px; }
+.tbl-scroll .tbl { margin-bottom: 0; }
+/* real links inside clickable rows (keyboard path to every row target) */
+.row-link { color: inherit; text-decoration: none; }
+.row-link:hover, .row-link:focus-visible { text-decoration: underline; }
+/* step-jump rows are real buttons now */
+button.jrow { border: none; background: none; font: inherit; width: 100%; text-align: left; color: var(--fg); }
+/* visible keyboard focus everywhere interactive */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg a:focus-visible rect { stroke: var(--fg); stroke-width: 2; }
+header nav { flex-wrap: wrap; }
+/* crumbs never force page scroll on long titles/branches */
+.crumbs b, .crumbs code { overflow-wrap: anywhere; }
+/* reduced motion: no perpetual pulsing, no smooth-scroll insistence */
+@media (prefers-reduced-motion: reduce) {
+  .pulse { animation: none; }
+  * { scroll-behavior: auto !important; }
+}
+/* queue "why it waits" keeps a readable measure once its table scrolls */
+.ctbl td.small { min-width: 22ch; }
+/* --- contrast (WCAG 2.1): status colors as TEXT, per theme ------------- */
+/* fills keep the PICO-8 brand values; text usages get darkened/lightened
+   variants that clear 4.5:1 on bg1/bg2 (see review: run/warn/pause failed 3:1) */
+:root {
+  --ok-t: #00892F; --bad-t: #D60041; --run-t: #966000; --pend-t: #72658C;
+  --warn-t: #D31C07; --pause-t: #0070B5; --appr-t: var(--appr); --cancel-t: var(--cancel);
+  --faint-t: #746A60;
+}
+[data-theme="dark"] {
+  --ok-t: var(--ok); --bad-t: #FF306F; --run-t: var(--run); --pend-t: #8E82A5;
+  --warn-t: var(--warn); --pause-t: var(--pause); --appr-t: #AD6FC7; --cancel-t: #C96F53;
+  --faint-t: #948578;
+  --spark: #5C6677;
+}
+.c-succeeded { color: var(--ok-t); } .c-failed, .c-fail { color: var(--bad-t); }
+.c-started { color: var(--run-t); } .c-pending { color: var(--pend-t); }
+.c-warning { color: var(--warn-t); } .c-paused { color: var(--pause-t); }
+.c-cancelled { color: var(--cancel-t); }
+.c-waiting_for_approval, .c-held { color: var(--appr-t); }
+.c-none, .c-skipped { color: var(--faint-t); }
+.wk-tick, .pal-k { fill: var(--faint-t); color: var(--faint-t); }
+.lno { color: #877A71; }
+[data-theme="dark"] .btn.primary { background: #1E72EA; border-color: #1E72EA; }
+.tsub td { color: var(--faint-t); }

@@ -76,14 +76,15 @@
         ? `#${cell.build.n} · ${cell.build.end ? fmtDur(bDur(cell.build)) : st(s).label}`
         : cell.kind === 'decision' ? reasonLabel(cell.decision) : 'no build';
       const fill = cell.kind === 'build' ? st(s).color : 'var(--mut3)';
-      const click = cell.kind === 'build' ? `onclick="location.hash='#/b/${cell.build.id}'"` : '';
-      nodes += `<g class="gnode ${s === 'started' ? 'pulse' : ''}" ${click}>
+      const g = `<g class="gnode ${s === 'started' ? 'pulse' : ''}">
         <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="5" fill="${fill}"/>
         <text x="${n.x + 9}" y="${n.y + 17}" class="t-job">${esc(nm)}${j.approve ? ' ⧖' : ''}</text>
         <text x="${n.x + 9}" y="${n.y + 32}" class="t-sub">${esc(sub)}${!ctxRef && refUsed ? ' @' + esc(refUsed) : ''}</text></g>`;
+      // real SVG link — keyboard-focusable and announced, unlike an onclick <g>
+      nodes += cell.kind === 'build' ? `<a href="#/b/${cell.build.id}" aria-label="${esc(nm)}: ${esc(sub)}">${g}</a>` : g;
     }
     const spanning = !ctxRef && refs.size > 1 ? `<div class="spanning">composite view — spanning ${[...refs].join(' … ')} (each node shows its own ref; pick a context to make it one commit)</div>` : '';
-    return spanning + `<div class="graph-scroll"><svg width="${W}" height="${H}" role="img" aria-label="pipeline graph">${edges}${nodes}</svg></div>`;
+    return spanning + `<div class="graph-scroll"><svg width="${W}" height="${H}" aria-label="pipeline graph">${edges}${nodes}</svg></div>`;
   }
 
   // ---------- Pipeline page -------------------------------------------------
@@ -92,7 +93,7 @@
     if (!pl) return '<div class="page">Unknown pipeline</div>';
     view = view || 'graph';
     const s = P.primaryStatus(pl);
-    const V = v => `<a class="tab ${view === v ? 'on' : ''}" href="#/p/${name}/${v}">${v}</a>`;
+    const V = v => `<a class="tab ${view === v ? 'on' : ''}" href="#/p/${name}/${v}">${v[0].toUpperCase() + v.slice(1)}</a>`;
     // context chips: primary-latest + lineage heads + recent versions
     const res = pl.resources[0];
     const ctxChips = [`<a class="commit-chip ${!ctx ? 'on' : ''}" href="#/p/${name}/${view}">primary-latest</a>`]
@@ -101,23 +102,23 @@
     let body = '';
     if (view === 'graph') body = graphSVG(pl, ctx || null);
     else if (view === 'versions') {
-      body = `<table class="tbl">${(res.versions || []).map(v => {
+      body = `<div class="tbl-scroll"><table class="tbl">${(res.versions || []).map(v => {
         return `<tr><td width="20">${res.pinned && res.pinned.ref === v.id.ref ? '📌' : ''}</td>
           <td><code>${esc(v.id.ref)}</code></td>
           <td>${esc(v.meta.msg || '')} ${v.meta.author ? `<span class="mut small">· ${esc(v.meta.author)}</span>` : ''}</td>
           <td class="mut small nowrap">${ago(v.meta.at)}</td>
           <td><span class="dots">${pl.jobs.filter(j => !j.cadence).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
         </tr>`;
-      }).join('')}</table>
-      ${res.pinned ? `<div class="warnbox gap">📌 pinned to <code>${esc(res.pinned.ref)}</code> by <b>${esc(res.pinned.actor)}</b> — "${esc(res.pinned.reason)}" (${ago(res.pinned.at)}). Newer versions are ignored; escape hatches carry actor + reason (K17).</div>` : ''}`;
+      }).join('')}</table></div>
+      ${res.pinned ? `<div class="warnbox gap">📌 pinned to <code>${esc(res.pinned.ref)}</code> by <b>${esc(res.pinned.actor)}</b> — "${esc(res.pinned.reason)}" (${ago(res.pinned.at)}). Newer versions are ignored; escape hatches carry actor + reason.</div>` : ''}`;
     } else if (view === 'config') {
       body = `<div class="pad">
         <div class="mut small gap-s">Revision-guarded set (CAS): a stale editor gets a conflict + three-way diff, never a silent overwrite. Restore creates a new revision.</div>
-        <table class="tbl"><thead><tr><th>rev</th><th>by</th><th>when</th><th>note</th><th></th></tr></thead>
+        <div class="tbl-scroll"><table class="tbl"><thead><tr><th>rev</th><th>by</th><th>when</th><th>note</th><th></th></tr></thead>
         ${pl.configHistory.map((h, i) => `<tr><td><b>${h.rev}</b>${i === 0 ? ' <span class="chip">current</span>' : ''}</td>
           <td>${esc(h.by)}</td><td class="mut small">${ago(h.at)}</td><td>${esc(h.note)}</td>
           <td class="r">${i > 0 ? `<button class="btn sm" data-act="noop">diff</button> <button class="btn sm" data-act="noop">restore as rev ${pl.configHistory[0].rev + 1}</button>` : ''}</td></tr>`).join('')}
-        </table></div>`;
+        </table></div></div>`;
     }
     return `<div class="page">
       <div class="crumbs"><a href="#/pipelines">pipelines</a> / <b>${esc(pl.team)}/${esc(name)}</b>
@@ -128,7 +129,7 @@
         <span class="sp"></span>
         <button class="btn sm" data-act="${pl.paused ? 'unpause' : 'pause'}" data-arg="${name}">${pl.paused ? '▶ Unpause' : '❚❚ Pause'}</button>
       </div>
-      ${view === 'graph' ? `<div class="ctx-banner">context: ${ctxChips.join('')} <span class="mut small">— statuses recompute for the chosen context; unlabeled mixture doesn't exist</span></div>` : ''}
+      ${view === 'graph' ? `<div class="ctx-banner">context: ${ctxChips.join('')} <span class="mut small">— statuses are for this context only</span></div>` : ''}
       ${pl.resources.some(r => r.checkError) ? `<div class="errbox">⚠ ${esc(pl.resources.find(r => r.checkError).name)} check failing — new versions are not being detected. <button class="btn sm" data-act="check" data-arg="${name}|${esc(pl.resources.find(r => r.checkError).name)}">↻ Re-check</button></div>` : ''}
       ${body}
     </div>`;
@@ -196,7 +197,7 @@
         <td class="nowrap">${VIEWS.weather(hist)}</td>
         <td class="nowrap spark-cell">${VIEWS.sparkDur(hist)}</td>
         <td class="mut small r nowrap">${lastAt ? ago(lastAt) : '—'}</td>
-        <td class="r"><a class="btn sm" href="#/p/${pl.name}/config" onclick="event.stopPropagation()">config</a></td>
+        <td class="r"><a class="btn sm" href="#/p/${pl.name}/config" onclick="event.stopPropagation()">Config</a></td>
       </tr>`;
     };
     const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th>weather · last ${10}</th><th>duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
@@ -210,12 +211,12 @@
     const chip = (k, lbl) => `<button class="chip-btn ${pipChip === k ? 'on' : ''}" onclick="_pipC('${k}')">${lbl}</button>`;
     return `<div class="page"><h1>Pipelines</h1>
       <div class="ctoolbar">
-        <input data-filter placeholder="filter team, name, description…  ( / )" value="${esc(pipFilter)}" oninput="_pipF(this.value)">
+        <input data-filter aria-label="filter pipelines" placeholder="filter team, name, description…  ( / )" value="${esc(pipFilter)}" oninput="_pipF(this.value)">
         ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● running')}${chip('paused', '❚❚ paused')}${chip('pr', '⇅ PR checks')}
         <span class="sp"></span>
         <span class="mut small">${pls.length} of ${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span>
       </div>
-      <table class="tbl ctbl ptbl">${head}<tbody>${rows}</tbody></table>
+      <div class="tbl-scroll"><table class="tbl ctbl ptbl">${head}<tbody>${rows}</tbody></table></div>
       <p class="mut small">Weather = last 10 completed runs (glyph is the pass rate); duration bars are the same runs oldest→newest — ↑/↓ marks the last run drifting beyond ±25%/−20% of the median. Real installs derive both from the builds table; deep history lands with Insights (Phase 4).</p>
     </div>`;
   };
@@ -276,11 +277,11 @@
     }
 
     // --- sidebar: this build's steps — click = expand (if folded) + scroll to it
-    const sideSteps = b.steps.map((sp, i) => `<a class="jrow st" href="javascript:void(0)"
+    const sideSteps = b.steps.map((sp, i) => `<button type="button" class="jrow st"
       onclick="const x=document.getElementById('step-${i}');if(!x)return;const d=x.querySelector('.step-head + div');if(d&&d.hidden){d.hidden=false;x.querySelector('.step-head').setAttribute('aria-expanded','true')}x.scrollIntoView({behavior:'smooth'})">
       <span class="c-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
       <span class="mut small type">${sp.type}</span><span class="jname">${esc(sp.name)}</span>
-      <span class="mut small nowrap">${sp.dur ? fmtDur(sp.dur) : ''}</span></a>`).join('')
+      <span class="mut small nowrap">${sp.dur ? fmtDur(sp.dur) : ''}</span></button>`).join('')
       || '<div class="jrow dim"><span class="mut small">no steps yet</span></div>';
 
     return `<div class="page b2-page">
@@ -294,7 +295,7 @@
             · <span class="c-${s}">${st(s).label}</span> ${fmtDur(bDur(b)) ? '· ' + fmtDur(bDur(b)) : ''}
             · <span title="cause">${esc(b.cause.detail)}</span> · rev ${b.intent.configRev}
             ${b.retryOf ? ` · <span class="chip">retry of ${esc(b.retryOf)}</span>` : ''}
-            ${b.queue && s !== 'held' ? ` · <b>${b.queue.matching === 0 ? `no online worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker for "${esc(b.queue.tag)}", busy`}</b> <span class="mut">(no fake ETA)</span>` : ''}
+            ${b.queue && s !== 'held' ? ` · <b>${b.queue.matching === 0 ? `no online worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker for "${esc(b.queue.tag)}", busy`}</b>` : ''}
             ${s === 'held' ? ' · <b>held: awaiting maintainer release (fork PR)</b>' : ''}
             ${stall != null && stall > 60 ? ` · <b class="c-failed">no output for ${fmtDur(stall)}</b>` : ''}</div>
         </div>
@@ -346,6 +347,11 @@
             <div class="small mut">· duration ${cmp.durDelta >= 0 ? '+' : ''}${fmtDur(Math.abs(cmp.durDelta))} vs last green</div>
           </div>` : ''}
 
+          ${!b.steps.length ? `<div class="panel"><div class="pad mut">
+            ${s === 'held' ? 'Nothing has run — this build is held awaiting maintainer release; no code or secrets have touched a worker.'
+          : b.queue ? `Nothing has run yet — the build is queued (${b.queue.matching === 0 ? `no online worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker, busy`}). Output will stream here when a worker picks it up.`
+          : 'No output yet — steps will appear when the build starts.'}
+          </div></div>` : ''}
           <div id="steps">
           ${b.steps.map((sp, i) => `<div class="step" id="step-${i}">
             <button class="step-head" aria-expanded="${sp.status === 'failed' || sp.status === 'started'}"
@@ -355,7 +361,7 @@
               <span class="sp"></span><span class="mut small">${sp.dur ? fmtDur(sp.dur) : ''}</span>
             </button>
             <div ${sp.status === 'failed' || sp.status === 'started' ? '' : 'hidden'} data-fold="st:${b.id}:${i}">
-              ${sp.log.length > 200 ? `<div class="mut small pad-s">showing last 200 of ${sp.log.length} lines · <a href="javascript:void(0)" data-act="noop">download full log</a> <span class="mut">(tail-first — K19a)</span></div>` : ''}
+              ${sp.log.length > 200 ? `<div class="mut small pad-s">showing last 200 of ${sp.log.length} lines · <a href="javascript:void(0)" data-act="noop">download full log</a> <span class="mut">(tail-first)</span></div>` : ''}
               ${sp.log.length ? `<pre class="log">${sp.log.slice(-200).map((l, k) => `<span class="ln"><span class="lno">${Math.max(0, sp.log.length - 200) + k + 1}</span>${/FAIL|ERROR|Error /.test(l) ? `<span class="l-err">${esc(l)}</span>` : /✓|^ok |OK$|PASS/.test(l) ? `<span class="l-ok">${esc(l)}</span>` : /^\$ /.test(l) ? `<span class="l-cmd">${esc(l)}</span>` : esc(l)}</span>`).join('\n')}</pre>` : '<div class="pad-s mut small">no output yet</div>'}
             </div>
           </div>`).join('')}
@@ -383,13 +389,12 @@
     const tags = [...new Set(pend.map(b => b.queue.tag))];
     return `<div class="page"><h1>Queue${P.team() ? ` <span class="mut small">· team ${esc(P.team())}</span>` : ''}</h1>
       <div class="meta" data-live><b>${running.length}</b> running · <b>${pend.length}</b> queued ·
-        capacity <b>${busy}/${slots}</b> slots on ${online.length} online worker${online.length === 1 ? '' : 's'}${booting.length ? ` <b class="c-pending">+ ${booting.length} provisioning</b> (${booting.reduce((s, w) => s + (w.slots || 1), 0)} slots on the way)` : ''}
-        <span class="mut small">— no ETAs: the honest answer is capacity + position (+ what the autoscaler is doing), not a guess</span></div>
+        capacity <b>${busy}/${slots}</b> slots on ${online.length} online worker${online.length === 1 ? '' : 's'}${booting.length ? ` <b class="c-pending">+ ${booting.length} provisioning</b> (${booting.reduce((s, w) => s + (w.slots || 1), 0)} slots on the way)` : ''}</div>
       ${pend.length ? `<h2>Waiting</h2>
-      <table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th>why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th>why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
       ${pend.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-pending">⏳</td>
-        <td class="ct-title"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</td>
+        <td class="ct-title"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
         <td><code>${esc(b.queue.tag)}</code></td>
         <td class="${b.queue.matching === 0 && !poolFor(b.queue.tag) ? 'c-failed' : 'mut'} small">${b.queue.matching === 0
           ? (poolFor(b.queue.tag)
@@ -398,9 +403,9 @@
           : `${b.queue.matching} matching worker, busy${b.queue.ahead ? ` · ${b.queue.ahead} ahead` : ''}`}</td>
         <td class="mut small r nowrap">${ago(b.start)}</td>
         <td class="r"><button class="btn sm" data-act="cancel" data-arg="${b.id}" onclick="event.stopPropagation()">Cancel</button></td>
-      </tr>`).join('')}</table>` : '<div class="allclear">✓ Queue is empty — new jobs start as soon as a matching worker is free.</div>'}
+      </tr>`).join('')}</table></div>` : '<div class="allclear">✓ Queue is empty — new jobs start as soon as a matching worker is free.</div>'}
       ${tags.length ? `<h2>Capacity by tag</h2>
-      <table class="tbl ctbl"><thead><tr><th>tag</th><th>online workers</th><th class="r">busy</th><th class="r">queued</th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th>tag</th><th>online workers</th><th class="r">busy</th><th class="r">queued</th></tr></thead>
       ${tags.map(t => {
       const m = online.filter(w => w.tags.includes(t));
       const bp = booting.filter(w => w.tags.includes(t));
@@ -409,16 +414,16 @@
         <td>${m.length ? m.map(w => `<b>${esc(w.name)}</b>`).join(', ') : ''}${bp.length ? `${m.length ? ', ' : ''}<span class="c-pending">${bp.map(w => esc(w.name)).join(', ')} (booting)</span>` : ''}${!m.length && !bp.length ? (pool ? `<span class="c-pending">pool ${esc(pool.name)} · scaled to zero, scales 0–${pool.max} on demand</span>` : '<span class="c-failed">none — and no pool serves this tag</span>') : ''}</td>
         <td class="r">${m.reduce((s, w) => s + (w.running || 0), 0)}</td>
         <td class="r">${pend.filter(b => b.queue.tag === t).length}</td></tr>`;
-    }).join('')}</table>` : ''}
+    }).join('')}</table></div>` : ''}
       <h2>Running</h2>
-      ${running.length ? `<table class="tbl ctbl">
+      ${running.length ? `<div class="tbl-scroll"><table class="tbl ctbl">
       ${running.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-started pulse">●</td>
-        <td class="ct-title"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</td>
+        <td class="ct-title"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
         <td class="mut small">on <b>${esc(b.worker)}</b></td>
         <td class="mut small r nowrap" data-live>${fmtDur(bDur(b))}</td>
-      </tr>`).join('')}</table>` : '<div class="mut pad-s small">nothing running right now</div>'}
-      <p class="mut small">Queue answers the developer's question — "when does my job start, how loaded are we?" Worker <i>health</i> lives under <a href="#/workers">Workers</a>.</p>
+      </tr>`).join('')}</table></div>` : '<div class="mut pad-s small">nothing running right now</div>'}
+      <p class="mut small">Worker health lives under <a href="#/workers">Workers</a>.</p>
     </div>`;
   };
 
@@ -440,7 +445,7 @@
     const disk = w => gauge(w.status === 'stale' ? null : w.disk, 0.85);
     const cpu = w => gauge(w.status === 'stale' ? null : w.cpu, 0.9);
     const row = w => `<tr onclick="location.hash='#/workers/${encodeURIComponent(w.name)}'">
-        <td class="nowrap"><b>${esc(w.name)}</b></td>
+        <td class="nowrap"><a class="row-link" href="#/workers/${encodeURIComponent(w.name)}"><b>${esc(w.name)}</b></a></td>
         <td class="nowrap">${w.status === 'provisioning'
         ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
         : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${P.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
@@ -450,7 +455,7 @@
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : disk(w)}</td>
         <td class="mut small">${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}</td>
         <td class="r">${w.running ? `${w.running}/${w.slots}` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
-        <td class="r">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="noop" onclick="event.stopPropagation()" title="${w.ephemeral ? 'drain = finish builds, then terminate early' : 'needs worker addressing (K21, Ph5)'}">drain</button>`}</td>
+        <td class="r">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="noop" onclick="event.stopPropagation()" title="${w.ephemeral ? 'drain = finish builds, then terminate early' : 'not wired up yet'}">drain</button>`}</td>
       </tr>`;
     const statics = workers.filter(w => !w.pool);
     const poolRows = pools.map(p => {
@@ -463,16 +468,16 @@
       ${inst.map(row).join('')}`;
     }).join('');
     return `<div class="page"><h1>Workers${P.team() ? ` <span class="mut small">· team ${esc(P.team())} + shared</span>` : ''}</h1>
-      <table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th>tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th>tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
       <tbody>
       ${statics.length ? `<tr class="tsub"><td colspan="9">static <span class="mut">· ${statics.length} registered</span></td></tr>${statics.map(row).join('')}` : ''}
       ${poolRows}
-      </tbody></table>
+      </tbody></table></div>
       <p class="mut small">Ephemeral instances are addressed by pool, not by name: a build's provenance keeps the instance name as a tombstone record (it must never dangle), but health, drain, and capacity questions are asked of the pool. Terminated instances roll up into the pool's daily count.</p>
-      <p class="mut small">Read-role users see a sanitized summary (counts + tag match) instead of this table — a deliberate authz change (K16). Drain/cordon need worker addressing (K21, Phase 5).</p>
+      <p class="mut small">Read-role users see a sanitized summary (counts + tag match) instead of this table — a deliberate access rule.</p>
       <h2>Storage</h2>
-      <div class="mut small pad-s">artifacts: — (K8) · logs: 41 MB · meta-records (decisions, receipts, config history): 2.1 MB — retention classes with reference-preservation apply (never orphan a config rev a kept build ran under).</div>
-      <p class="mut small">Workers answers the operator's question — "are the machines well: disk, heartbeat, version drift?" Scheduling load lives under <a href="#/queue">Queue</a>. Click a worker for its week of telemetry.</p>
+      <div class="mut small pad-s">artifacts: — · logs: 41 MB · meta-records (decisions, receipts, config history): 2.1 MB — retention classes with reference-preservation apply (never orphan a config rev a kept build ran under).</div>
+      <p class="mut small">Scheduling load lives under <a href="#/queue">Queue</a>. Click a worker for its telemetry.</p>
     </div>`;
   };
 
@@ -553,7 +558,7 @@
         ${w.ephemeral && w.up ? `<span class="mut small">up ${fmtDur(w.up / 1000)}</span>` : ''}
         <span class="mut small">${w.team || 'shared'} · ${w.tags.map(t => `<code>${esc(t)}</code>`).join(' ')} · ${esc(w.version)} · ${w.running || 0}/${w.slots} slots busy</span>
         <span class="sp"></span>
-        <button class="btn" data-act="noop" title="${w.ephemeral ? 'finish builds, then terminate early' : 'needs worker addressing (K21, Ph5)'}">drain</button></div>
+        <button class="btn" data-act="noop" title="${w.ephemeral ? 'finish builds, then terminate early' : 'not wired up yet'}">drain</button></div>
       ${w.status === 'stale' ? `<div class="warnbox">⚠ No heartbeat for ${ago(w.lastSeen)} — telemetry below ends there; nothing is fabricated past the last report.</div>` : ''}
       ${wk ? `
       <h2>${w.ephemeral && wk.hours < wkRange ? 'This instance’s lifetime' : 'Usage'}
@@ -561,9 +566,9 @@
         <span class="mut small">— cpu &amp; disk overlaid with the runs that produced them (hover a band or a run row; green = cleanup)</span></h2>
       ${weekChart(wk, rangeH, runsF, samplesF)}
       <div class="pr-cols">
-        <div style="flex:1.2 1 460px;min-width:380px">
+        <div style="flex:1.2 1 460px;min-width:300px">
           <h2>What moved the disk <span class="mut small">— runs in view, aggregated by job</span></h2>
-          <table class="tbl ctbl wtbl">
+          <div class="tbl-scroll"><table class="tbl ctbl wtbl">
             <thead><tr><th>job</th><th class="r">runs</th><th class="r">time</th><th class="r">disk Δ</th><th width="130"></th></tr></thead>
             ${rows.map(r => `<tr>
               <td class="nowrap">${esc(r.key)}</td>
@@ -572,19 +577,19 @@
               <td class="r nowrap ${r.dDisk >= 0.02 ? 'c-failed' : r.dDisk < 0 ? 'c-succeeded' : 'mut'}">${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%</td>
               <td><span class="disk-bar" style="width:110px"><span style="width:${Math.round(Math.abs(r.dDisk) / maxAbs * 100)}%;background:${r.dDisk < 0 ? 'var(--ok, #2a2)' : r.dDisk >= 0.02 ? 'var(--warn, #d33)' : 'var(--spark)'}"></span></span></td>
             </tr>`).join('')}
-          </table>
+          </table></div>
           <p class="mut small">This is the disk-leak answer: a job whose Δ dominates the week is the thing to cache-cap or prune. Deltas come from before/after sampling around each run — cheap, no per-file accounting.</p>
         </div>
-        <div style="flex:1 1 380px;min-width:340px">
+        <div style="flex:1 1 380px;min-width:300px">
           <h2>Runs in view</h2>
-          <table class="tbl ctbl wtbl">
+          <div class="tbl-scroll"><table class="tbl ctbl wtbl">
             ${runsF.map((r, i) => ({ r, i })).sort((a, b) => a.r.agoH - b.r.agoH).slice(0, 14).map(({ r, i }) => `<tr onmouseenter="_wkHi(${i},1)" onmouseleave="_wkHi(${i},0)" ${r.bid ? `onclick="location.hash='#/b/${r.bid}'"` : 'style="cursor:default"'}>
               <td class="mut small nowrap">${r.agoH}h ago</td>
               <td class="nowrap">${esc(r.pipeline)}/${esc(r.job)}${r.n ? ` <span class="mut small">#${r.n}</span>` : ''}</td>
               <td class="mut small r nowrap">${r.durM}m</td>
               <td class="mut small r nowrap">${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%</td>
             </tr>`).join('')}
-          </table>
+          </table></div>
         </div>
       </div>` : '<div class="mut pad">No telemetry yet — this instance has not reported a full sample window.</div>'}
     </div>`;
@@ -595,17 +600,17 @@
     const rows = D().audit.filter(a => !P.team() || a.target.startsWith(P.team() + '/'));
     return `<div class="page"><h1>Audit${P.team() ? ` <span class="mut small">· team ${esc(P.team())}</span>` : ''}</h1>
       ${rows.length ? '' : `<div class="mut pad">No recorded actions for team ${esc(P.team())} in the demo window.</div>`}
-      <table class="tbl"><thead><tr><th>when</th><th>who</th><th>action</th><th>target</th><th>detail</th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl"><thead><tr><th>when</th><th>who</th><th>action</th><th>target</th><th>detail</th></tr></thead>
       ${rows.map(a => `<tr><td class="mut small nowrap">${ago(a.at)}</td><td><b>${esc(a.user)}</b></td>
-        <td><code>${esc(a.action)}</code></td><td>${esc(a.target)}</td><td class="mut small">${esc(a.detail)}</td></tr>`).join('')}</table>
+        <td><code>${esc(a.action)}</code></td><td>${esc(a.target)}</td><td class="mut small">${esc(a.detail)}</td></tr>`).join('')}</table></div>
       <p class="mut small">Every action in the preview writes here — approvals record what they were bound to; holds, releases, supersessions, pins and pauses carry actor + reason.</p></div>`;
   };
 
   VIEWS.teams = function () {
     return `<div class="page narrow"><h1>Teams</h1>
       ${D().teams.map(t => `<section class="panel"><div class="panel-head"><b>${esc(t.name)}</b><span class="mut small">${esc(t.desc)}</span></div>
-        <table class="tbl">${t.members.map(m => `<tr><td><b>${esc(m.user)}</b></td><td><span class="chip">${m.role}</span></td>
-          <td class="r"><button class="btn sm" data-act="noop">change role</button></td></tr>`).join('')}</table></section>`).join('')}
+        <div class="tbl-scroll"><table class="tbl">${t.members.map(m => `<tr><td><b>${esc(m.user)}</b></td><td><span class="chip">${m.role}</span></td>
+          <td class="r"><button class="btn sm" data-act="noop">change role</button></td></tr>`).join('')}</table></div></section>`).join('')}
       <p class="mut small">Denied actions elsewhere follow "why + who can help" — e.g. a write-role user sees "release needs maintain — ask egon or maria."</p></div>`;
   };
 
