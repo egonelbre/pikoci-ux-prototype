@@ -91,6 +91,9 @@ const params = {
   ease: 1.3,   // how fast the head's curvature fades: 0 = stays on the circle
   N: 220,
 };
-fs.writeFileSync('pikoci-logo.svg', logo(params));
+// NOTE: pikoci-logo.svg is now HAND-TUNED (Affinity source: pikoci-logo.af)
+// — pixel-aligned by Egon on top of this generator's output. Do not
+// overwrite it; the generator writes its draft next to it instead.
+fs.writeFileSync('generated.svg', logo(params));
 fs.writeFileSync('variant-noline.svg', logo({ ...params, Rout: 46, Rmid: 46, Rin: 40.5 }));
 console.log('written');
