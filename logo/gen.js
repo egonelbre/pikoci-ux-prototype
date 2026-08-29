@@ -7,8 +7,8 @@
 //            smoothly with NO kink: curvature is continuous at the barb and
 //            monotonic after it. The hand-drawn "tip escapes outward" drift
 //            falls out of this for free.
-//   halfW  — rounded tail cap, shaft that swells then slims to a neck,
-//            barb jump, linear taper to the tip.
+//   halfW  — rounded tail cap, uniform shaft (the reference's stroke is
+//            even; width games read as wobble), barb jump, taper to tip.
 // Edges are offsets along the spine's local normal (not radial), so the
 // taper reads straight even while the head still carries a little bend.
 const NAVY = '#1D2B53', BLUE = '#29ADFF', YELLOW = '#FFEC27', CREAM = '#FFF1E8';
@@ -23,12 +23,9 @@ const smooth = t => t * t * (3 - 2 * t);
 function halfW(x, o) {
   if (x <= 0 || x >= o.L) return 0;
   if (x >= o.Ls) return o.headW * Math.pow(1 - (x - o.Ls) / o.headLen, o.taperPow);
-  const a = x / o.Ls;
-  let w = a < 0.45
-    ? o.wTail + (o.wMax - o.wTail) * smooth(a / 0.45)
-    : o.wMax + (o.wNeck - o.wMax) * smooth((a - 0.45) / 0.55);
-  if (x < o.wTail) w *= Math.sqrt(1 - ((o.wTail - x) / o.wTail) ** 2); // round cap
-  return w;
+  // uniform shaft (like the reference) with a round tail cap
+  if (x < o.w) return o.w * Math.sqrt(1 - ((o.w - x) / o.w) ** 2);
+  return o.w;
 }
 
 // spine samples: {x, p, t} — position and unit tangent at arc length x
@@ -62,7 +59,7 @@ function bentArrow(o) {
   let barbDone = false;
   for (const s of sp) {
     if (!barbDone && s.x >= o.Ls) { // barb: jump from neck width to headW
-      const [a1, b1] = off(s, halfW(Math.min(s.x, o.Ls) - 0.01, o));
+      const [a1, b1] = off(s, o.w);
       const [a2, b2] = off(s, o.headW);
       outer.push(a1, a2); inner.push(b1, b2); barbDone = true;
       if (s.x === o.Ls) continue;
@@ -89,7 +86,7 @@ const Ls = r * rad(206), headLen = 14;
 const params = {
   Rout: 48, Rmid: 43.5, Rin: 39, dot: 7,
   r, th1: -13, Ls, headLen, L: Ls + headLen,
-  wTail: 4.0, wMax: 5.0, wNeck: 3.3,
+  w: 4.2,                              // uniform shaft half-width
   headW: 9.5, taperPow: 1.05,
   ease: 1.3,   // how fast the head's curvature fades: 0 = stays on the circle
   N: 220,
