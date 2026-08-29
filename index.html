@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PikoCI UX prototype</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.55 system-ui, sans-serif; max-width: 720px; margin: 8vh auto; padding: 0 20px; }
+  h1 { font-size: 22px; } h1 span { opacity: .5; font-weight: 400; }
+  a.card { display: block; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: 10px;
+    padding: 14px 18px; margin: 12px 0; text-decoration: none; color: inherit; }
+  a.card:hover { border-color: color-mix(in srgb, currentColor 45%, transparent); }
+  a.card b { font-size: 16px; }
+  a.card small { opacity: .65; display: block; margin-top: 2px; }
+  p.mut { opacity: .65; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>▞ PikoCI <span>— UX prototype</span></h1>
+<p>UX exploration for a new <a href="https://github.com/pikoci/pikoci">PikoCI</a> frontend.
+Everything runs on fake data; minimal visual design on purpose — the subject is the UX.</p>
+<a class="card" href="preview/index.html"><b>Preview app →</b>
+  <small>the reference implementation of UX-PLAN v4.1: team scoping, change-centric PR inbox,
+  verdict-first PR pages, two-pane build view, queue/workers with ephemeral pools, environments with rollback</small></a>
+<a class="card" href="prototypes/index.html"><b>14 prototype variations →</b>
+  <small>one shared dataset, fourteen paradigms: graph-first, runs-first, wallboard, terminal,
+  trace, attention inbox, dense table, synthesis, change-centric …</small></a>
+<p class="mut">Docs live in the repo: UX-PLAN.md (start here), REQUIREMENTS.md, SCENARIOS.md, RESEARCH.md.</p>
+</body>
+</html>
