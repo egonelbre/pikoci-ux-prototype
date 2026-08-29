@@ -26,7 +26,7 @@ function logo(o) {
 }
 
 const fs = require('fs');
-const params = { Rout: 48, Rmid: 43.5, Rin: 39, r: 23, sw: 7, th1: -82, th2: 155, tipD: 14, w: 11, dot: 7 };
+const params = { Rout: 48, Rmid: 43.5, Rin: 39, r: 23, sw: 7, th1: -82, th2: 152, tipD: 34, w: 10, dot: 7 };
 fs.writeFileSync('pikoci-logo.svg', logo(params));
 fs.writeFileSync('variant-noline.svg', logo({ ...params, Rout: 46, Rmid: 46, Rin: 40.5 }));
 console.log('written');

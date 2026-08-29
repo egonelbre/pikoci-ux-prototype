@@ -2,7 +2,7 @@
   <polygon points="50,2 91.57,26 91.57,74 50,98 8.43,74 8.43,26" fill="#1D2B53"/>
   <polygon points="50,6.5 87.67,28.25 87.67,71.75 50,93.5 12.33,71.75 12.33,28.25" fill="#FFEC27"/>
   <polygon points="50,11 83.77,30.5 83.77,69.5 50,89 16.23,69.5 16.23,30.5" fill="#29ADFF"/>
-  <path d="M53.2,27.22 A23,23 0 1,1 29.15,59.72" fill="none" stroke="#FFF1E8" stroke-width="7" stroke-linecap="round"/>
-  <path d="M19.19,64.37 L27.42,54.39 L39.12,55.07 Z" fill="#FFF1E8"/>
+  <path d="M53.2,27.22 A23,23 0 1,1 29.69,60.8" fill="none" stroke="#FFF1E8" stroke-width="7" stroke-linecap="round"/>
+  <path d="M20.86,65.49 L27.13,47.6 L38.52,56.1 Z" fill="#FFF1E8"/>
   <circle cx="50" cy="50" r="7" fill="#FFEC27"/>
 </svg>
