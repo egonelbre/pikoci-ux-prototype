@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>08 · Trace — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #141019; color: #e6e1ee; }
+  a { color: #9fb7ff; }
+  .mut { color: #8d8499; }
+  header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: #1d1826; border-bottom: 1px solid #2e2740; flex: none; }
+  header a { color: #b4aac6; } header a.on { color: #fff; font-weight: 700; }
+  header .logo { font-weight: 700; color: #b490ff; }
+  main { flex: 1; min-height: 0; overflow: auto; }
+  .tracehead { padding: 10px 16px; border-bottom: 1px solid #2e2740; background: #1d1826; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .errsec { margin: 12px 16px; border: 1px solid #7b2742; background: #2a1420; border-radius: 8px; overflow: hidden; }
+  .errsec .h { padding: 8px 12px; color: #ff5c8a; font-weight: 700; }
+  .spanrow { display: flex; align-items: center; gap: 8px; padding: 3px 16px; cursor: pointer; font-size: 13px; }
+  .spanrow:hover { background: #221c30; }
+  .spanrow.sel { background: #2e2740; }
+  .spanrow .nm { width: 300px; flex: none; display: flex; gap: 7px; align-items: center; overflow: hidden; white-space: nowrap; }
+  .spanrow .barlane { flex: 1; position: relative; height: 16px; }
+  .spanbar { position: absolute; top: 2px; height: 12px; border-radius: 3px; min-width: 4px; }
+  .indent { display: inline-block; width: 18px; }
+  .logpane { border-top: 2px solid #b490ff; background: #0f0c14; }
+  .logpane .h { display: flex; gap: 10px; padding: 6px 14px; align-items: center; background: #1d1826; position: sticky; top: 0; }
+  .log { background: transparent; }
+  .tracerow { display: flex; gap: 12px; align-items: center; padding: 8px 16px; border-bottom: 1px solid #221c30; }
+  .tracerow:hover { background: #1d1826; }
+  .durbar { height: 6px; border-radius: 3px; background: #b490ff; display: inline-block; }
+  .lightwrap { background: #faf8f6; color: #1f1a16; min-height: 100%; }
+  footer { flex: none; padding: 5px 14px; background: #1d1826; border-top: 1px solid #2e2740; font-size: 12px; color: #8d8499; }
+  footer a { color: #b4aac6; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<main id="main" data-keep-scroll></main>
+<footer><b>Variation 08 · Trace</b> (Dagger-Cloud-inspired: every build is a trace of spans; errors surfaced first, timing always visible) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', 'Traces', ['', 't', 'b'].includes(sec))} ${l('pipelines', 'Pipelines', sec === 'pipelines')}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Workers', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')} <span class="sp"></span>${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+
+// spans for a build: step spans + synthetic child spans for logs' phases
+function spans(b) {
+  const out = []; let t = 0;
+  b.steps.forEach((sp, i) => {
+    const dur = sp.dur || (sp.status === 'started' ? (Date.now() - b.start) / 1000 - t : 0);
+    out.push({ id: 'p' + i, depth: 0, name: sp.name, type: sp.type, status: sp.status, t0: t, dur, log: sp.log, idx: i });
+    // synthetic sub-spans: split log at command lines
+    let sub = [], cur = null;
+    sp.log.forEach(line => {
+      if (/^\$ |^starting |^running /.test(line)) { cur = { name: line.replace(/^\$ /, ''), n: 0 }; sub.push(cur); }
+      else if (cur) cur.n++;
+    });
+    if (sub.length > 1) {
+      let off = 0;
+      const total = sub.reduce((a, s) => a + s.n + 1, 0);
+      sub.forEach((s, k) => {
+        const d = dur * (s.n + 1) / total;
+        out.push({ id: 'p' + i + '.' + k, depth: 1, name: s.name, type: '', status: sp.status === 'started' && k === sub.length - 1 ? 'started' : (sp.status === 'failed' && k === sub.length - 1 ? 'failed' : 'succeeded'), t0: t + off, dur: d, log: null, idx: i });
+        off += d;
+      });
+    }
+    t += dur;
+  });
+  return { list: out, total: Math.max(t, 0.001) };
+}
+
+function home() {
+  const all = DATA.builds.slice().sort((a, b) => b.start - a.start).slice(0, 25);
+  const maxD = Math.max(...all.map(b => P.buildDur(b) || 0), 1);
+  const appr = P.needsApproval();
+  return `${appr.length ? `<div class="errsec" style="border-color:#8e44ad;background:#241a2e"><div class="h" style="color:#c39bd3">⧖ waiting for a human</div>
+      ${appr.map(b => `<div style="padding:4px 12px 10px"><a href="#/t/${b.id}">${esc(b.pipeline)} / ${esc(b.job)} #${b.n}</a>
+        <span class="mut">— 1/2 approvals</span> <button class="btn sm" data-act="approve|${b.id}">Approve</button></div>`).join('')}</div>` : ''}
+    ${all.map(b => `<div class="tracerow">
+      <span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}" style="width:16px">${st(b.status).sym}</span>
+      <div style="flex:1;min-width:0">
+        <a href="#/t/${b.id}"><b>${esc(b.pipeline)} / ${esc(b.job)}</b> #${b.n}</a>
+        <div class="mut" style="font-size:12px">${esc(b.team)} · ${Object.values(b.versions).map(v => `<code style="background:#2e2740;color:#c9bfdd">${esc(String(v).slice(0, 7))}</code>`).join(' ')} · ${b.trigger.kind === 'manual' ? 'manual by ' + esc(b.trigger.user) : esc(b.trigger.detail || b.trigger.kind)}</div></div>
+      <div style="width:180px" class="r"><span class="durbar" style="width:${Math.max((P.buildDur(b) || 0) / maxD * 160, 3)}px;background:${st(b.status).color}"></span></div>
+      <div class="mut r" style="width:110px;font-size:12px" data-live-times>${fmtDur(P.buildDur(b))}<br>${ago(b.start)}</div>
+    </div>`).join('')}`;
+}
+
+function pipelinesPage() {
+  return `<div class="pg"><h1 style="color:#e6e1ee">Pipelines</h1>
+    ${DATA.pipelines.map(pl => {
+    const s = P.pipelineStatus(pl);
+    return `<div class="tracerow"><span class="st-${s}">${st(s).sym}</span>
+      <div style="flex:1"><b>${esc(pl.team)}/${esc(pl.name)}</b> <span class="mut">${esc(pl.desc)}</span></div>
+      ${pl.jobs.map(j => { const js = P.jobStatus(pl, j.name); const lb = P.latestBuild(pl, j.name); return lb ? `<a href="#/t/${lb.id}" title="${esc(j.name)}" class="hcell" style="background:${st(js).color}"></a>` : ''; }).join('')}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function tracePage(id, selId) {
+  const b = P.getBuild(id);
+  if (!b) return '<div class="pg">not found</div>';
+  const { list, total } = spans(b);
+  const sel = list.find(s => s.id === selId) || list.find(s => s.status === 'failed') || list.find(s => s.status === 'started') || list[list.length - 1];
+  const fail = list.find(s => s.status === 'failed' && s.depth === 0);
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const j = pl.jobs.find(x => x.name === b.job.split('/')[0]);
+  const errTail = fail ? (b.steps[fail.idx].log.filter(l => /FAIL|ERROR|Error/.test(l)).slice(0, 4)) : [];
+  return `<div class="tracehead">
+      <a href="#/">traces</a> ›
+      <b class="st-${b.status}">${st(b.status).sym} ${esc(b.pipeline)} / ${esc(b.job)} #${b.n}</b>
+      <span class="mut" data-live-times>${fmtDur(P.buildDur(b))} · ${ago(b.start)} · worker ${esc(b.worker)} ·
+        ${Object.entries(b.versions).map(([r, v]) => esc(r) + '@' + esc(String(v).slice(0, 7))).join(' ')}</span>
+      <span class="sp"></span>${P.buildActions(b)}</div>
+    ${b.status === 'waiting_for_approval' ? `<div class="errsec" style="border-color:#8e44ad;background:#241a2e">
+      <div class="h" style="color:#c39bd3">⧖ ${esc(j && j.approve ? j.approve.name : 'approval gate')} — 1/${j && j.approve ? j.approve.need : 2} approvals (maria ✓)</div>
+      <div style="padding:0 12px 10px"><button class="btn primary sm" data-act="approve|${b.id}">Approve</button>
+        <button class="btn danger sm" data-act="reject|${b.id}">Reject</button></div></div>` : ''}
+    ${fail ? `<div class="errsec"><div class="h">✕ first failure: ${esc(fail.name)} <span class="mut">at +${fmtDur(fail.t0)}</span></div>
+      <pre class="log" style="padding:0 0 8px">${errTail.map(l => `<span class="ln"><span class="lno">·</span><span class="l-err">${esc(l)}</span></span>`).join('\n')}</pre>
+      <div style="padding:0 12px 10px"><a href="#/t/${b.id}/${fail.id}" onclick="setTimeout(()=>{const el=document.getElementById('logpane'); el&&el.scrollIntoView()},50)">jump to span ↓</a></div></div>` : ''}
+    <div style="padding:8px 0">
+      <div class="spanrow mut" style="cursor:default"><span class="nm">span</span>
+        <span class="barlane">${[0, .25, .5, .75, 1].map(f => `<span style="position:absolute;left:${f * 100}%;font-size:10px;color:#5d5470">${fmtDur(total * f)}</span>`).join('')}</span></div>
+      ${list.map(s => `<div class="spanrow ${sel && s.id === sel.id ? 'sel' : ''}" onclick="location.hash='#/t/${b.id}/${s.id}'">
+        <span class="nm"><span class="indent" style="width:${s.depth * 18}px"></span>
+          <span class="st-${s.status} ${s.status === 'started' ? 'pulse' : ''}">${st(s.status).sym}</span>
+          ${s.type ? `<span class="mut">${s.type}</span>` : ''} ${esc(s.name)}</span>
+        <span class="barlane"><span class="spanbar ${s.status === 'started' ? 'pulse' : ''}" style="left:${s.t0 / total * 100}%;width:${Math.max(s.dur / total * 100, .5)}%;background:${st(s.status).color}"></span></span>
+        <span class="mut" style="width:64px;text-align:right;font-size:12px">${fmtDur(s.dur)}</span>
+      </div>`).join('')}
+    </div>
+    <div class="logpane" id="logpane">
+      <div class="h"><span class="st-${sel.status}">${st(sel.status).sym}</span><b>${esc(sel.name)}</b>
+        <span class="mut">+${fmtDur(sel.t0)} → ${fmtDur(sel.t0 + sel.dur)}</span><span class="sp"></span>
+        <span class="mut">breadcrumb: ${esc(b.pipeline)} › ${esc(b.job)} › ${esc(b.steps[sel.idx].name)}</span></div>
+      ${(sel.log || b.steps[sel.idx].log).length ? P.renderLog(sel.log || b.steps[sel.idx].log) : '<div class="pad mut">no output</div>'}
+    </div>`;
+}
+
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b, c] = r;
+  const light = h => `<div class="lightwrap">${h}</div>`;
+  if (!a) m.innerHTML = home();
+  else if (a === 'pipelines') m.innerHTML = pipelinesPage();
+  else if (a === 'teams') m.innerHTML = light(Pages.teams());
+  else if (a === 'workers') m.innerHTML = light(Pages.workers());
+  else if (a === 'audit') m.innerHTML = light(Pages.audit({ user: b }));
+  else if (a === 'settings') m.innerHTML = light(Pages.settings());
+  else if (a === 't') m.innerHTML = tracePage(b, c);
+  else if (a === 'b') m.innerHTML = tracePage(b);
+  else m.innerHTML = light('<div class="pg">Not found</div>');
+}
+App.start(render);
+</script>
+</body></html>

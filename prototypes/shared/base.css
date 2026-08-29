@@ -1,0 +1,93 @@
+/* Shared minimal styling for PikoCI UX prototypes. Deliberately plain:
+   the point is layout & flow, not visual design. */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1f1a16; background: #faf8f6;
+}
+a { color: #0b63c5; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  background: #efeae5; padding: 1px 4px; border-radius: 3px; }
+h1 { font-size: 19px; margin: 0 0 12px; }
+h2 { font-size: 15px; margin: 18px 0 8px; }
+.mut { color: #7a7168; }
+.sp { flex: 1; }
+.r { text-align: right; }
+.nowrap { white-space: nowrap; }
+.pad { padding: 10px 12px; }
+.pg { padding: 18px 22px; max-width: 1100px; }
+
+/* cards & tables */
+.card { background: #fff; border: 1px solid #e4ddd6; border-radius: 6px; margin-bottom: 16px; overflow: hidden; }
+.cardhead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee7e0; }
+.tbl { width: 100%; border-collapse: collapse; background: #fff; }
+.tbl th { text-align: left; font-weight: 600; font-size: 12px; color: #7a7168;
+  padding: 7px 12px; border-bottom: 1px solid #e4ddd6; }
+.tbl td { padding: 7px 12px; border-bottom: 1px solid #f0eae4; vertical-align: top; }
+.tbl tr:hover td { background: #fbf6f1; }
+
+/* buttons, chips, badges */
+.btn { font: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid #d5cdc5;
+  border-radius: 5px; background: #fff; cursor: pointer; }
+.btn:hover { background: #f4efe9; }
+.btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.btn.primary:hover { background: #175bc4; }
+.btn.danger { color: #b3003a; border-color: #e2a9b9; }
+.btn.danger:hover { background: #fdeef2; }
+.btn.sm { font-size: 12px; padding: 2px 7px; }
+.chip { display: inline-block; padding: 2px 9px; border: 1px solid #d5cdc5; border-radius: 12px;
+  font-size: 12px; color: #4a423b; background: #fff; }
+.chip.on { background: #1f1a16; color: #fff; border-color: #1f1a16; }
+.filters { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 10px;
+  font-size: 12px; color: #fff; }
+.role { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: #efeae5; }
+.role-admin { background: #1f1a16; color: #fff; }
+.role-maintain { background: #6d5ca8; color: #fff; }
+.role-write { background: #2b7a4b; color: #fff; }
+code.tag { background: #eef3f8; }
+
+/* status text colors */
+.st-succeeded { color: #00A83A; } .st-failed { color: #FF004D; }
+.st-started { color: #FFA300; } .st-pending { color: #83769C; }
+.st-cancelled { color: #AB5236; } .st-errored { color: #FA8072; }
+.st-waiting_for_approval { color: #8e44ad; } .st-paused { color: #29ADFF; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.pulse { animation: pulse 1.3s ease-in-out infinite; }
+
+/* history strip */
+.hstrip { display: inline-flex; gap: 2px; vertical-align: middle; }
+.hcell { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.hcell:hover { outline: 2px solid #1f1a16; }
+
+/* logs */
+.log { margin: 0; padding: 10px 0; background: #14100d; color: #e8e2dc; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }
+.log .ln { display: block; padding: 0 12px 0 0; white-space: pre-wrap; }
+.log .ln:hover { background: #241d18; }
+.log .lno { display: inline-block; width: 44px; text-align: right; padding-right: 12px;
+  color: #6b615a; user-select: none; }
+.l-err { color: #ff5c8a; font-weight: 600; }
+.l-ok { color: #4fd07d; }
+.l-warn { color: #ffc14d; }
+.l-cmd { color: #7fc6ff; }
+
+/* boxes */
+.warnbox { background: #fff6e8; border: 1px solid #f0d9ad; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; }
+.okbox { background: #eef9f0; border: 1px solid #bfe3c6; border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 13px; }
+.errbox { background: #fdeef2; border: 1px solid #f2bccb; border-radius: 6px; padding: 9px 12px; margin-bottom: 12px; }
+
+/* editor */
+.editorwrap { border: 1px solid #e4ddd6; border-radius: 6px; overflow: hidden; }
+.editor { margin: 0; padding: 14px; background: #fff; min-height: 300px; max-height: 60vh; overflow: auto;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; outline: none; }
+
+/* toast */
+#piko-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%) translateY(80px);
+  background: #1f1a16; color: #fff; padding: 9px 16px; border-radius: 6px; font-size: 13px;
+  transition: transform .2s; z-index: 999; pointer-events: none; }
+#piko-toast.show { transform: translateX(-50%) translateY(0); }

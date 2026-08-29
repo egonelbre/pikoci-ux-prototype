@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>02 · Runs-first — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #e4ddd6; flex: none; }
+  header .logo { font-weight: 700; color: #1f6feb; }
+  header a { color: #4a423b; } header a.on { font-weight: 700; color: #1f1a16; }
+  .wrap { display: flex; flex: 1; min-height: 0; }
+  nav.side { width: 230px; flex: none; overflow: auto; border-right: 1px solid #e4ddd6; padding: 12px 0; background: #faf8f6; }
+  nav.side .tm { padding: 8px 16px 3px; font-size: 11px; text-transform: uppercase; color: #7a7168; }
+  nav.side a.pl { display: flex; gap: 8px; align-items: center; padding: 5px 16px; color: #1f1a16; }
+  nav.side a.pl.on { background: #eef3f8; font-weight: 600; border-right: 3px solid #1f6feb; }
+  main { flex: 1; overflow: auto; min-width: 0; }
+  .runrow { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #f0eae4; }
+  .runrow:hover { background: #fbf6f1; }
+  .runrow .t { flex: 1; min-width: 0; }
+  .runrow .t .c { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* run page */
+  .runwrap { display: flex; min-height: 0; height: 100%; }
+  .jobcol { width: 250px; flex: none; overflow: auto; border-right: 1px solid #e4ddd6; padding: 10px 0; background: #faf8f6; }
+  .jobcol a { display: flex; gap: 8px; align-items: center; padding: 6px 16px; color: #1f1a16; }
+  .jobcol a.on { background: #eef3f8; font-weight: 600; }
+  .jobcol .grp { padding: 8px 16px 2px; font-size: 11px; color: #7a7168; text-transform: uppercase; }
+  .logcol { flex: 1; min-width: 0; overflow: auto; background: #14100d; color: #e8e2dc; }
+  .lstep { border-bottom: 1px solid #2a231d; }
+  .lstephead { display: flex; gap: 10px; padding: 7px 14px; cursor: pointer; align-items: center; font-family: ui-monospace, Menlo, monospace; font-size: 13px; position: sticky; top: 0; background: #14100d; }
+  .lstephead:hover { background: #241d18; }
+  .runhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #e4ddd6; background: #fff; }
+  footer { flex: none; padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<div class="wrap"><nav class="side" id="side" data-keep-scroll></nav><main id="main" data-keep-scroll></main></div>
+<footer><b>Variation 02 · Runs-first</b> (GitHub-Actions-inspired: commit-centric run list, job sidebar, step-collapsed log) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+
+// group builds into "runs" by (pipeline, n)
+function runsFor(pl) {
+  const map = new Map();
+  for (const b of P.pipelineBuilds(pl)) {
+    if (!map.has(b.n)) map.set(b.n, []);
+    map.get(b.n).push(b);
+  }
+  return [...map.entries()].sort((a, b) => b[0] - a[0]).map(([n, builds]) => {
+    const status = builds.map(b => b.status).sort((a, b) => P.RANK[a] - P.RANK[b])[0];
+    const start = Math.min(...builds.map(b => b.start));
+    const end = builds.some(b => !b.end) ? null : Math.max(...builds.map(b => b.end));
+    return { n, builds, status, start, end, pl };
+  });
+}
+function runCommit(run) {
+  const ref = Object.values(run.builds[0].versions)[0];
+  for (const r of run.pl.resources) {
+    const v = (r.versions || []).find(v => v.ref === ref);
+    if (v) return v;
+  }
+  return { ref, msg: null };
+}
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', 'Runs', ['', 'p', 'r', 'b'].includes(sec))} ${l('teams', 'Teams', sec === 'teams')}
+    ${l('workers', 'Workers', sec === 'workers')} ${l('audit', 'Audit', sec === 'audit')}
+    <span class="sp"></span>
+    <input placeholder="Search runs, pipelines… " style="font:inherit;padding:3px 9px;border:1px solid #d5cdc5;border-radius:5px;width:220px">
+    ${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+function sidebar(route) {
+  const cur = route[0] === 'p' ? route[1] + '/' + route[2] : '';
+  let h = `<a class="pl ${!cur && !route[0] ? 'on' : ''}" href="#/"><b>All runs</b></a>`;
+  for (const t of DATA.teams) {
+    h += `<div class="tm">${esc(t.name)}</div>`;
+    for (const pl of P.teamPipelines(t.name)) {
+      const s = P.pipelineStatus(pl);
+      h += `<a class="pl ${cur === pl.team + '/' + pl.name ? 'on' : ''}" href="#/p/${pl.team}/${pl.name}">
+        <span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym}</span> ${esc(pl.name)}</a>`;
+    }
+  }
+  document.getElementById('side').innerHTML = h;
+}
+
+function runRow(run, showPl) {
+  const c = runCommit(run);
+  const jobsBar = run.builds.map(b => `<a href="#/r/${run.pl.team}/${run.pl.name}/${run.n}/${b.id}" title="${esc(b.job)}: ${st(b.status).label}"
+    class="hcell" style="background:${st(b.status).color}"></a>`).join('');
+  return `<div class="runrow">
+    <span class="st-${run.status} ${run.status === 'started' ? 'pulse' : ''}" style="font-size:17px;width:20px">${st(run.status).sym}</span>
+    <div class="t">
+      <div class="c"><a href="#/r/${run.pl.team}/${run.pl.name}/${run.n}"><b>${esc(c.msg || 'run #' + run.n)}</b></a>
+        ${run.status === 'waiting_for_approval' ? '<span class="badge" style="background:#8e44ad">needs approval</span>' : ''}</div>
+      <div class="mut" style="font-size:12px">${showPl ? `<b>${esc(run.pl.team)}/${esc(run.pl.name)}</b> · ` : ''}#${run.n} · <code>${esc(String(c.ref).slice(0, 7))}</code>${c.author ? ' · ' + esc(c.author) : ''}</div>
+    </div>
+    <span class="hstrip">${jobsBar}</span>
+    <div class="mut r" style="width:90px;font-size:12px" data-live-times>${ago(run.start)}<br>${fmtDur(run.end ? (run.end - run.start) / 1000 : (Date.now() - run.start) / 1000)}</div>
+  </div>`;
+}
+
+function allRuns() {
+  const runs = DATA.pipelines.flatMap(pl => runsFor(pl)).sort((a, b) => b.start - a.start).slice(0, 30);
+  const appr = P.needsApproval();
+  return `<div>
+    ${appr.length ? `<div class="warnbox" style="margin:12px 16px">⧖ <b>${appr.length} build waiting for your approval:</b>
+      ${appr.map(b => `<a href="#/r/${b.team}/${b.pipeline}/${b.n}/${b.id}">${esc(b.pipeline)} / ${esc(b.job)} #${b.n}</a>`).join(', ')}</div>` : ''}
+    ${runs.map(r => runRow(r, true)).join('')}</div>`;
+}
+
+function pipelineRuns(team, name) {
+  const pl = P.getPipeline(team, name);
+  const runs = runsFor(pl);
+  return `<div class="runhead"><b style="font-size:16px">${esc(name)}</b>
+      ${pl.paused ? '<span class="st-paused">❚❚ paused</span>' : ''} ${pl.public ? '<span class="chip">public</span>' : ''}
+      <span class="sp"></span>
+      <button class="btn" data-act="pausePipeline|${team}|${name}">${pl.paused ? '▶ Unpause' : '❚❚ Pause'}</button>
+      <a class="btn" href="#/p/${team}/${name}/resources">Resources</a>
+      <a class="btn" href="#/p/${team}/${name}/config">Config</a></div>
+    ${runs.map(r => runRow(r, false)).join('')}
+    ${!runs.length ? '<div class="pg mut">No runs yet.</div>' : ''}`;
+}
+
+function resourcesPage(team, name) {
+  const pl = P.getPipeline(team, name);
+  return `<div class="pg"><h1><a href="#/p/${team}/${name}">${esc(name)}</a> · resources</h1>
+    ${pl.resources.map(r => `<section class="card">
+      <div class="cardhead"><b>${esc(r.name)}</b><span class="chip">${esc(r.type)}</span>
+        ${r.pinned ? `<span class="st-started">📌 ${esc(r.pinned)}</span>` : ''}
+        ${r.checkError ? `<span class="st-errored">⚠ check failing</span>` : `<span class="mut">checked ${ago(r.lastCheck)}</span>`}
+        <span class="sp"></span><button class="btn sm" data-act="check|${team}|${name}|${r.name}">↻ Check</button></div>
+      ${r.checkError ? `<div class="errbox" style="margin:10px">${esc(r.checkError)}</div>` : ''}
+      <table class="tbl"><tbody>${r.versions.slice(0, 4).map(v => `<tr>
+        <td width="20">${r.pinned === v.ref ? '📌' : ''}</td><td><code>${esc(v.ref)}</code></td>
+        <td>${esc(v.msg || '')}</td><td class="mut nowrap">${ago(v.at)}</td>
+        <td class="r"><button class="btn sm" data-act="pin|${team}|${name}|${r.name}|${v.ref}">${r.pinned === v.ref ? 'Unpin' : 'Pin'}</button></td></tr>`).join('')}
+      </tbody></table></section>`).join('')}</div>`;
+}
+
+// ---------- run page: job sidebar + log ----------
+function runPage(team, name, n, buildId) {
+  const pl = P.getPipeline(team, name);
+  const run = runsFor(pl).find(r => r.n === +n);
+  if (!run) return `<div class="pg">Run not found</div>`;
+  const c = runCommit(run);
+  const sel = buildId ? P.getBuild(buildId) : (run.builds.find(b => ['failed', 'started', 'waiting_for_approval'].includes(b.status)) || run.builds[0]);
+  // group matrix builds
+  const groups = {};
+  for (const b of run.builds) {
+    const g = b.job.includes('/') ? b.job.split('/')[0] : null;
+    (groups[g || b.job] = groups[g || b.job] || []).push(b);
+  }
+  const jobcol = Object.entries(groups).map(([g, bs]) => bs.length > 1
+    ? `<div class="grp">${esc(g)} (matrix ×${bs.length})</div>` + bs.map(b => jl(b, b.job.split('/')[1])).join('')
+    : jl(bs[0], g)).join('');
+  function jl(b, label) {
+    return `<a class="${sel && b.id === sel.id ? 'on' : ''}" href="#/r/${team}/${name}/${n}/${b.id}">
+      <span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym}</span>
+      ${esc(label)} <span class="sp"></span><span class="mut" style="font-size:11px">${b.end ? fmtDur((b.end - b.start) / 1000) : ''}</span></a>`;
+  }
+  const jobDef = sel ? pl.jobs.find(j => j.name === sel.job.split('/')[0]) : null;
+  return `<div style="display:flex;flex-direction:column;height:100%">
+    <div class="runhead">
+      <span class="st-${run.status}" style="font-size:18px">${st(run.status).sym}</span>
+      <div><b style="font-size:15px">${esc(c.msg || 'run #' + n)}</b>
+        <div class="mut" style="font-size:12px"><a href="#/p/${team}/${name}">${esc(name)}</a> #${n} · <code>${esc(String(c.ref).slice(0, 7))}</code> ${c.author ? '· ' + esc(c.author) : ''} · ${ago(run.start)}</div></div>
+      <span class="sp"></span>${sel ? P.buildActions(sel) : ''}</div>
+    ${sel && sel.status === 'waiting_for_approval' ? `<div class="warnbox" style="margin:0;border-radius:0">⧖ <b>${esc(jobDef && jobDef.approve ? jobDef.approve.name : 'approval gate')}</b> — 1/${jobDef && jobDef.approve ? jobDef.approve.need : 2} approvals (maria ✓). <button class="btn primary sm" data-act="approve|${sel.id}">Approve</button> <button class="btn danger sm" data-act="reject|${sel.id}">Reject</button></div>` : ''}
+    <div class="runwrap">
+      <div class="jobcol" id="jobcol" data-keep-scroll>${jobcol}</div>
+      <div class="logcol" id="logcol" data-keep-scroll ${sel && sel.status === 'started' ? 'data-follow' : ''}>
+        ${sel ? sel.steps.map((sp, i) => `
+          <div class="lstep">
+            <div class="lstephead" onclick="const x=this.nextElementSibling;x.style.display=x.style.display==='none'?'':'none'">
+              <span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
+              <span style="color:#9a9089">${sp.type}</span> <b>${esc(sp.name)}</b>
+              <span class="sp"></span><span style="color:#6b615a">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+            <div style="display:${['failed', 'started'].includes(sp.status) || sel.steps.length === 1 ? '' : 'none'}">${sp.log.length ? P.renderLog(sp.log, { id: 'b' + i }) : '<div class="pad" style="color:#6b615a">no output</div>'}</div>
+          </div>`).join('') : '<div class="pad">no job selected</div>'}
+      </div>
+    </div></div>`;
+}
+
+function render(r) {
+  header(r); sidebar(r);
+  const m = document.getElementById('main');
+  const [a, b, c, d, e] = r;
+  if (!a) m.innerHTML = allRuns();
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else if (a === 'b') { const bl = P.getBuild(b); m.innerHTML = bl ? runPage(bl.team, bl.pipeline, bl.n, bl.id) : 'not found'; }
+  else if (a === 'p' && d === 'config') m.innerHTML = Pages.editor(b, c);
+  else if (a === 'p' && d === 'resources') m.innerHTML = resourcesPage(b, c);
+  else if (a === 'p') m.innerHTML = pipelineRuns(b, c);
+  else if (a === 'r') m.innerHTML = runPage(b, c, d, e);
+  else m.innerHTML = `<div class="pg">Not found</div>`;
+}
+App.start(render);
+</script>
+</body></html>

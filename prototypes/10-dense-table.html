@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>10 · Dense table — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 7px 16px; background: #2a3f54; color: #fff; flex: none; }
+  header a { color: #b8c7d6; } header a.on { color: #fff; font-weight: 700; }
+  header .logo { font-weight: 700; color: #7fc6ff; }
+  .wrap { display: flex; flex: 1; min-height: 0; }
+  nav.tree { width: 210px; flex: none; overflow: auto; border-right: 1px solid #e4ddd6; background: #f4f1ee; padding: 8px 0; font-size: 13px; }
+  nav.tree .t { padding: 5px 12px; font-weight: 700; cursor: pointer; }
+  nav.tree a { display: block; padding: 3px 12px 3px 26px; color: #1f1a16; }
+  nav.tree a.on { background: #dde8f2; font-weight: 600; }
+  main { flex: 1; overflow: auto; min-width: 0; }
+  .tbl.dense td, .tbl.dense th { padding: 4px 10px; font-size: 13px; }
+  .weather { letter-spacing: 1px; font-size: 12px; }
+  .spark { display: inline-flex; align-items: flex-end; gap: 1px; height: 16px; }
+  .spark i { width: 4px; background: #b9cfe4; display: inline-block; border-radius: 1px 1px 0 0; }
+  .spark i.bad { background: #FF004D; }
+  .star { cursor: pointer; color: #c8c2bc; } .star.on { color: #FFA300; }
+  .toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-bottom: 1px solid #e4ddd6; background: #fff; position: sticky; top: 0; z-index: 4; }
+  footer { flex: none; padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<div class="wrap"><nav class="tree" id="tree" data-keep-scroll></nav><main id="main" data-keep-scroll></main></div>
+<footer><b>Variation 10 · Dense table</b> (TeamCity/Jenkins-classic-inspired: maximum information per pixel, weather + trends, inline actions) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+let favs = { 'main/pikoci/deploy': 1, 'main/pikoci/test-integration': 1 };
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', 'Overview', ['', 'scope', 'j', 'b'].includes(sec))} ${l('changes', 'Changes', sec === 'changes')}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Agents', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')} <span class="sp"></span>${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+function tree(route) {
+  const scope = route[0] === 'scope' ? route[1] + (route[2] ? '/' + route[2] : '') : '';
+  let h = `<a href="#/" style="padding-left:12px;font-weight:700" class="${!scope && !route[0] ? 'on' : ''}">★ Favorites & all</a>`;
+  for (const t of DATA.teams) {
+    h += `<div class="t">▾ ${esc(t.name)}</div>`;
+    for (const pl of P.teamPipelines(t.name)) {
+      const s = P.pipelineStatus(pl);
+      h += `<a class="${scope === t.name + '/' + pl.name ? 'on' : ''}" href="#/scope/${t.name}/${pl.name}">
+        <span class="st-${s}">${st(s).sym}</span> ${esc(pl.name)}${pl.paused ? ' ❚❚' : ''}</a>`;
+    }
+  }
+  document.getElementById('tree').innerHTML = h;
+}
+
+function weather(pl, job) {
+  const bs = P.jobBuilds(pl, job).slice(0, 5);
+  const fails = bs.filter(b => ['failed', 'errored'].includes(b.status)).length;
+  const icon = fails === 0 ? '☀' : fails === 1 ? '🌤' : fails === 2 ? '☁' : '⛈';
+  return `<span class="weather" title="${fails}/5 recent failed">${icon} ${bs.map(b =>
+    `<a href="#/b/${b.id}" class="st-${b.status}" title="#${b.n}">${st(b.status).sym}</a>`).join('')}</span>`;
+}
+function spark(pl, job) {
+  const bs = P.jobBuilds(pl, job).slice(0, 8).reverse();
+  const ds = bs.map(b => P.buildDur(b) || 0);
+  const max = Math.max(...ds, 1);
+  return `<span class="spark">${bs.map((b, i) =>
+    `<i style="height:${Math.max(ds[i] / max * 16, 2)}px" class="${['failed', 'errored'].includes(b.status) ? 'bad' : ''}" title="#${b.n}: ${fmtDur(ds[i])}"></i>`).join('')}</span>`;
+}
+
+function jobRow(pl, j) {
+  const s = P.jobStatus(pl, j.name);
+  const b = P.latestBuild(pl, j.name);
+  const key = pl.team + '/' + pl.name + '/' + j.name;
+  const v = b && Object.values(b.versions)[0];
+  let msg = '';
+  if (v) for (const r of pl.resources) { const vv = (r.versions || []).find(x => x.ref === v); if (vv && vv.msg) { msg = vv.msg; break; } }
+  return `<tr>
+    <td><span class="star ${favs[key] ? 'on' : ''}" onclick="window._fav('${key}')">★</span></td>
+    <td>${weather(pl, j.name)}</td>
+    <td><a href="#/j/${pl.team}/${pl.name}/${j.name}"><b>${esc(j.name)}</b></a>${j.matrix ? ' ×' + j.matrix.length : ''}${j.approve ? ' ⧖' : ''}${j.paused ? ' <span class="st-paused">❚❚</span>' : ''}</td>
+    <td class="mut">${esc(pl.team)}/${esc(pl.name)}</td>
+    <td>${b ? `<a href="#/b/${b.id}" class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym} #${b.n} ${st(b.status).label}</a>` : '<span class="mut">—</span>'}</td>
+    <td class="mut nowrap" data-live-times>${b ? ago(b.start) : ''}</td>
+    <td class="nowrap">${b ? fmtDur(P.buildDur(b)) : ''} ${spark(pl, j.name)}</td>
+    <td class="mut" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v ? `<code>${esc(String(v).slice(0, 7))}</code> ${esc(msg)}` : ''}</td>
+    <td class="r nowrap">
+      <button class="btn sm" title="run" data-act="trigger|${pl.team}|${pl.name}|${j.name}">▶</button>
+      <button class="btn sm" title="pause" data-act="pauseJob|${pl.team}|${pl.name}|${j.name}">${j.paused ? '▶❚' : '❚❚'}</button>
+      ${b && b.status === 'waiting_for_approval' ? `<button class="btn sm primary" data-act="approve|${b.id}">approve</button>` : ''}
+    </td></tr>`;
+}
+
+function tablePage(team, plName) {
+  let items = [];
+  for (const pl of DATA.pipelines) {
+    if (team && pl.team !== team) continue;
+    if (plName && pl.name !== plName) continue;
+    for (const j of pl.jobs) items.push([pl, j]);
+  }
+  const scoped = !!team;
+  if (!scoped) items.sort((a, b) => (favs[b[0].team + '/' + b[0].name + '/' + b[1].name] ? 1 : 0) - (favs[a[0].team + '/' + a[0].name + '/' + a[1].name] ? 1 : 0));
+  const pl0 = plName ? P.getPipeline(team, plName) : null;
+  return `<div class="toolbar">
+      <b>${scoped ? esc(team) + (plName ? ' / ' + esc(plName) : '') : 'All jobs'}</b>
+      <span class="mut">${items.length} jobs</span><span class="sp"></span>
+      ${pl0 ? `<button class="btn sm" data-act="pausePipeline|${team}|${plName}">${pl0.paused ? '▶ Unpause pipeline' : '❚❚ Pause pipeline'}</button>
+        <a class="btn sm" href="#/config/${team}/${plName}">Config</a>` : ''}
+      <input placeholder="filter…" oninput="window._flt=this.value;P.App.refresh()" value="${esc(window._flt || '')}" style="font:inherit;font-size:12px;padding:2px 8px;border:1px solid #d5cdc5;border-radius:4px">
+    </div>
+    ${pl0 ? resourceStrip(pl0) : ''}
+    <table class="tbl dense"><thead><tr><th></th><th>Weather</th><th>Job</th><th>Pipeline</th><th>Last build</th><th>When</th><th>Duration / trend</th><th>Change</th><th></th></tr></thead>
+    <tbody>${items.filter(([pl, j]) => !window._flt || (pl.name + j.name).includes(window._flt)).map(([pl, j]) => jobRow(pl, j)).join('')}</tbody></table>`;
+}
+function resourceStrip(pl) {
+  return `<div class="toolbar" style="position:static;background:#faf8f6">
+    ${pl.resources.map(r => `<span class="chip" style="${r.checkError ? 'border-color:#FA8072' : ''}">
+      ${r.checkError ? '⚠ ' : ''}${r.pinned ? '📌 ' : '↻ '}${esc(r.name)}
+      <span class="mut">${r.versions[0] ? String(r.versions[0].ref).slice(0, 7) : ''}</span>
+      <a href="javascript:void(0)" onclick="P.ACT.pin('${pl.team}','${pl.name}','${r.name}','${r.versions[0] ? r.versions[0].ref : ''}')">${r.pinned ? 'unpin' : 'pin'}</a></span>`).join('')}
+  </div>`;
+}
+
+function jobPage(team, plName, job) {
+  const pl = P.getPipeline(team, plName);
+  const builds = P.jobBuilds(pl, job);
+  return `<div class="toolbar"><a href="#/scope/${team}/${plName}">${esc(team)}/${esc(plName)}</a> / <b>${esc(job)}</b>
+    <span class="sp"></span><button class="btn sm primary" data-act="trigger|${team}|${plName}|${job}">▶ Run</button></div>
+    <table class="tbl dense"><thead><tr><th></th><th>Build</th><th>When</th><th>Duration</th><th>Worker</th><th>Trigger</th><th>Versions</th><th></th></tr></thead><tbody>
+    ${builds.map(b => `<tr><td><span class="st-${b.status}">${st(b.status).sym}</span></td>
+      <td><a href="#/b/${b.id}"><b>#${b.n}</b>${b.job.includes('/') ? ' ' + b.job.split('/')[1] : ''}</a></td>
+      <td class="mut">${ago(b.start)}</td><td>${fmtDur(P.buildDur(b)) || '—'}</td><td class="mut">${esc(b.worker)}</td>
+      <td class="mut">${b.trigger.kind === 'manual' ? '▶ ' + esc(b.trigger.user) : esc(b.trigger.detail || b.trigger.kind)}</td>
+      <td>${Object.values(b.versions).map(v => `<code>${esc(String(v).slice(0, 7))}</code>`).join(' ')}</td>
+      <td class="r">${P.buildActions(b)}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+function buildPage(id) {
+  const b = P.getBuild(id);
+  if (!b) return '<div class="pg">not found</div>';
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const j = pl.jobs.find(x => x.name === b.job.split('/')[0]);
+  return `<div class="toolbar">
+      <a href="#/scope/${b.team}/${b.pipeline}">${esc(b.team)}/${esc(b.pipeline)}</a> /
+      <a href="#/j/${b.team}/${b.pipeline}/${b.job.split('/')[0]}">${esc(b.job)}</a> / <b>#${b.n}</b>
+      <span class="badge" style="background:${st(b.status).color}">${st(b.status).sym} ${st(b.status).label}</span>
+      ${P.buildMeta(b)}<span class="sp"></span>${P.buildActions(b)}</div>
+    ${b.status === 'waiting_for_approval' ? `<div class="warnbox" style="margin:10px 14px">⧖ <b>${esc(j.approve.name)}</b> — 1/${j.approve.need} approvals (maria ✓)</div>` : ''}
+    <div style="padding:10px 14px">
+    ${b.steps.map((sp, i) => `<div class="card">
+      <div class="cardhead"><span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
+        <span class="mut">${sp.type}</span><b>${esc(sp.name)}</b><span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+      ${sp.log.length ? P.renderLog(sp.log, { id: 'd' + i }) : ''}</div>`).join('')}</div>`;
+}
+
+// changes view: commits ↔ builds correlation (TeamCity-style)
+function changesPage() {
+  const rows = [];
+  for (const pl of DATA.pipelines) for (const r of pl.resources) for (const v of (r.versions || [])) {
+    if (!v.msg) continue;
+    const builds = DATA.builds.filter(b => Object.values(b.versions).includes(v.ref));
+    rows.push({ pl, r, v, builds });
+  }
+  rows.sort((a, b) => b.v.at - a.v.at);
+  return `<div class="pg" style="max-width:none"><h1>Changes</h1>
+    <table class="tbl dense"><thead><tr><th>Change</th><th>Author</th><th>When</th><th>Resource</th><th>Builds</th></tr></thead><tbody>
+    ${rows.slice(0, 20).map(x => `<tr>
+      <td><code>${esc(String(x.v.ref).slice(0, 7))}</code> ${esc(x.v.msg)}</td>
+      <td>${esc(x.v.author || '')}</td><td class="mut nowrap">${ago(x.v.at)}</td>
+      <td class="mut">${esc(x.pl.name)} · ${esc(x.r.name)}</td>
+      <td>${x.builds.map(b => `<a class="st-${b.status}" href="#/b/${b.id}" title="${esc(b.job)} #${b.n}">${st(b.status).sym}</a>`).join(' ') || '<span class="mut">not built</span>'}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+window._fav = k => { favs[k] = !favs[k]; App.refresh(); };
+
+function render(r) {
+  header(r); tree(r);
+  const m = document.getElementById('main');
+  const [a, b, c, d] = r;
+  if (!a) m.innerHTML = tablePage();
+  else if (a === 'scope') m.innerHTML = tablePage(b, c);
+  else if (a === 'j') m.innerHTML = jobPage(b, c, d);
+  else if (a === 'b') m.innerHTML = buildPage(b);
+  else if (a === 'changes') m.innerHTML = changesPage();
+  else if (a === 'config') m.innerHTML = Pages.editor(b, c);
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else m.innerHTML = `<div class="pg">Not found</div>`;
+}
+App.start(render);
+</script>
+</body></html>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>07 · Terminal — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { background: #0d0a08; color: #d8d2cc; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  a { color: #7fc6ff; }
+  .topline { flex: none; display: flex; gap: 16px; padding: 6px 14px; background: #1a1512; border-bottom: 1px solid #2a231d; }
+  .topline b { color: #29ADFF; }
+  .view { flex: 1; overflow: auto; min-height: 0; padding: 6px 0; }
+  .row { display: flex; gap: 0; padding: 2px 14px; white-space: pre; cursor: pointer; }
+  .row:hover { background: #1a1512; }
+  .row.sel { background: #29ADFF; color: #0d0a08; }
+  .row.sel .mut, .row.sel a, .row.sel [class^="st-"] { color: #0d0a08 !important; }
+  .row .c { overflow: hidden; text-overflow: ellipsis; }
+  .hdr { padding: 2px 14px; color: #6b615a; text-transform: uppercase; font-size: 11px; white-space: pre; }
+  .bottomline { flex: none; display: flex; gap: 14px; padding: 6px 14px; background: #1a1512; border-top: 1px solid #2a231d; color: #8a8178; }
+  .key { color: #ffc14d; }
+  input.cmd { background: #0d0a08; border: none; color: #d8d2cc; font: inherit; outline: none; flex: 1; }
+  .overlay { position: fixed; inset: 10% 20%; background: #1a1512; border: 1px solid #4a423b; padding: 20px 24px; overflow: auto; z-index: 10; }
+  .log { background: transparent; }
+  .banner { padding: 4px 14px; color: #ffc14d; }
+</style>
+</head><body>
+<div class="topline" id="top"></div>
+<div class="view" id="view" data-keep-scroll></div>
+<div class="bottomline" id="bottom"></div>
+<div id="overlay"></div>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+let sel = 0, filter = '', mode = 'normal', cmdText = '', showHelp = false;
+const pad = (s, n) => { s = String(s); return s.length >= n ? s.slice(0, n - 1) + '…' : s + ' '.repeat(n - s.length); };
+
+function rows() { // current view's row model: [{html, action, id}]
+  const r = App.route();
+  const [v, a, b, c] = r;
+  const out = [];
+  const F = s => !filter || s.toLowerCase().includes(filter.toLowerCase());
+  if (!v || v === 'pipelines') {
+    for (const pl of DATA.pipelines) {
+      if (!F(pl.team + '/' + pl.name)) continue;
+      const s = P.pipelineStatus(pl);
+      const lastB = P.pipelineBuilds(pl)[0];
+      const attn = P.pipelineAttention(pl);
+      out.push({
+        go: `#/jobs/${pl.team}/${pl.name}`, pl,
+        html: `<span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${pad(st(s).sym + ' ' + st(s).label, 16)}</span>` +
+          pad(pl.team + '/' + pl.name, 26) +
+          `<span class="mut">${pad(lastB ? '#' + lastB.n + ' ' + ago(lastB.start) : '-', 18)}</span>` +
+          `<span class="st-waiting_for_approval">${pad(attn.filter(x => x.kind === 'approval').length ? '⧖ approval' : '', 12)}</span>` +
+          `<span class="st-errored">${attn.filter(x => x.kind === 'check-error').length ? '! check' : ''}</span>`,
+      });
+    }
+  } else if (v === 'jobs') {
+    const pl = P.getPipeline(a, b);
+    for (const j of pl.jobs) {
+      if (!F(j.name)) continue;
+      const s = P.jobStatus(pl, j.name);
+      const lb = P.latestBuild(pl, j.name);
+      out.push({
+        go: `#/builds/${a}/${b}/${j.name}`, job: j, pl,
+        html: `<span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${pad(st(s).sym + ' ' + st(s).label, 16)}</span>` +
+          pad(j.name + (j.matrix ? ' ×' + j.matrix.length : '') + (j.approve ? ' ⧖' : ''), 30) +
+          `<span class="mut">${pad(lb ? '#' + lb.n + ' ' + fmtDur(P.buildDur(lb)) : '-', 16)}</span>` +
+          `<span class="mut">${j.paused ? 'paused' : ''}</span>`,
+      });
+    }
+    for (const rs of pl.resources) {
+      if (!F(rs.name)) continue;
+      out.push({
+        go: null, res: rs, pl,
+        html: `<span class="mut">${pad('↻ resource', 16)}</span>` + pad(rs.name, 30) +
+          `<span class="mut">${pad(rs.pinned ? '📌 ' + rs.pinned : 'checked ' + ago(rs.lastCheck), 24)}</span>` +
+          `<span class="st-errored">${rs.checkError ? '! ' + rs.checkError : ''}</span>`,
+      });
+    }
+  } else if (v === 'builds') {
+    const pl = P.getPipeline(a, b);
+    for (const bl of P.jobBuilds(pl, c)) {
+      out.push({
+        go: `#/log/${bl.id}`, build: bl,
+        html: `<span class="st-${bl.status} ${bl.status === 'started' ? 'pulse' : ''}">${pad(st(bl.status).sym + ' ' + st(bl.status).label, 18)}</span>` +
+          pad('#' + bl.n + (bl.job.includes('/') ? ' ' + bl.job.split('/')[1] : ''), 20) +
+          `<span class="mut">${pad(ago(bl.start), 12)}${pad(fmtDur(P.buildDur(bl)) || '-', 10)}${pad(bl.worker, 12)}</span>` +
+          `<span class="mut">${Object.values(bl.versions).map(x => String(x).slice(0, 7)).join(' ')}</span>`,
+      });
+    }
+  } else if (v === 'workers') {
+    for (const w of DATA.workers) out.push({
+      go: null,
+      html: `<span class="${w.status === 'online' ? 'l-ok' : 'l-err'}">${pad(w.status, 9)}</span>` + pad(w.name, 14) +
+        `<span class="mut">${pad(w.team || 'shared', 10)}${pad(w.tags.join(','), 26)}${pad(w.version, 8)}</span>` +
+        (w.running.length ? `<span class="l-warn">${esc(w.running.join(' '))}</span>` : `<span class="mut">idle</span>`),
+    });
+    const pend = P.pendingBuilds();
+    for (const b of pend) out.push({
+      go: `#/log/${b.id}`,
+      html: `<span class="l-warn">${pad('⚠ stuck', 9)}</span>` + pad(b.pipeline + '/' + b.job + ' #' + b.n, 30) +
+        `<span class="mut">pending ${ago(b.start)} — no online worker with tag 'terraform'</span>`,
+    });
+  } else if (v === 'audit') {
+    for (const e of DATA.audit) out.push({
+      go: null,
+      html: `<span class="mut">${pad(ago(e.at), 10)}</span>` + pad(e.user, 8) +
+        `<span class="l-cmd">${pad(e.action, 20)}</span>` + pad(e.target, 34) + `<span class="mut">${esc(e.detail)}</span>`,
+    });
+  } else if (v === 'teams') {
+    for (const t of DATA.teams) for (const m of t.members) out.push({
+      go: null,
+      html: pad(t.name, 12) + pad(m.user, 10) + `<span class="mut">${pad(m.role, 10)}</span>`,
+    });
+  }
+  return out;
+}
+
+function viewTitle() {
+  const [v, a, b, c] = App.route();
+  if (!v || v === 'pipelines') return 'pipelines';
+  if (v === 'jobs') return `jobs(${a}/${b})`;
+  if (v === 'builds') return `builds(${a}/${b}/${c})`;
+  if (v === 'log') return 'build';
+  return v;
+}
+
+function render(r) {
+  const [v, a] = r;
+  const running = P.runningBuilds().length, appr = P.needsApproval().length;
+  document.getElementById('top').innerHTML =
+    `<b>piko</b> <span>‹${viewTitle()}›</span><span class="sp"></span>
+     <span class="st-started">${running} running</span>
+     <span class="st-waiting_for_approval">${appr} need approval</span>
+     <span class="mut">${DATA.workers.filter(w => w.status === 'online').length}/${DATA.workers.length} workers</span>
+     <span class="mut" data-live-times>${new Date().toLocaleTimeString()}</span>`;
+
+  const view = document.getElementById('view');
+  if (v === 'log') {
+    const b = P.getBuild(a);
+    if (!b) { view.innerHTML = '<div class="banner">build not found</div>'; }
+    else {
+      const j = P.getPipeline(b.team, b.pipeline).jobs.find(x => x.name === b.job.split('/')[0]);
+      view.innerHTML = `
+        <div class="banner"><span class="st-${b.status}">${st(b.status).sym} ${esc(b.pipeline)}/${esc(b.job)} #${b.n} — ${st(b.status).label}</span>
+          <span class="mut"> · ${fmtDur(P.buildDur(b))} · worker ${esc(b.worker)} · ${Object.values(b.versions).map(x => String(x).slice(0, 7)).join(' ')}</span></div>
+        ${b.status === 'waiting_for_approval' ? `<div class="banner">⧖ ${esc(j && j.approve ? j.approve.name : 'gate')} 1/${j && j.approve ? j.approve.need : 2} — press <span class="key">a</span> approve, <span class="key">x</span> reject</div>` : ''}
+        ${b.steps.map(sp => `
+          <div class="banner" style="color:#8a8178">── <span class="st-${sp.status}">${st(sp.status).sym}</span> ${sp.type} <b style="color:#d8d2cc">${esc(sp.name)}</b> ${sp.dur ? fmtDur(sp.dur) : ''} ──</div>
+          ${sp.log.length ? P.renderLog(sp.log) : ''}`).join('')}`;
+      if (b.status === 'started') view.setAttribute('data-follow', ''); else view.removeAttribute('data-follow');
+    }
+  } else {
+    view.removeAttribute('data-follow');
+    const rs = rows();
+    if (sel >= rs.length) sel = Math.max(0, rs.length - 1);
+    const heads = {
+      pipelines: pad('STATUS', 16) + pad('PIPELINE', 26) + pad('LAST', 18) + 'ATTENTION',
+      jobs: pad('STATUS', 16) + pad('JOB / RESOURCE', 30) + pad('LAST', 16) + '',
+      builds: pad('STATUS', 18) + pad('BUILD', 20) + pad('WHEN      DUR       WORKER', 34) + 'VERSIONS',
+      workers: pad('STATE', 9) + pad('WORKER', 14) + pad('TEAM      TAGS', 36) + 'RUNNING',
+      audit: pad('WHEN', 10) + pad('USER', 8) + pad('ACTION', 20) + 'TARGET',
+      teams: pad('TEAM', 12) + pad('USER', 10) + 'ROLE',
+    };
+    view.innerHTML = `<div class="hdr">${heads[v || 'pipelines'] || ''}</div>` +
+      rs.map((row, i) => `<div class="row ${i === sel ? 'sel' : ''}" onclick="window._click(${i})">${row.html}</div>`).join('') +
+      (filter ? `<div class="banner">filter: /${esc(filter)} (esc to clear)</div>` : '');
+  }
+
+  const keys = v === 'log'
+    ? `<span><span class="key">esc</span> back</span><span><span class="key">r</span> retry</span><span><span class="key">a</span> approve</span><span><span class="key">x</span> reject/cancel</span>`
+    : `<span><span class="key">↑↓/jk</span> move</span><span><span class="key">↵</span> open</span><span><span class="key">esc</span> back</span>
+       <span><span class="key">/</span> filter</span><span><span class="key">t</span> trigger</span><span><span class="key">p</span> pause</span>
+       <span><span class="key">:</span> goto (pipelines·workers·audit·teams·config·help)</span>`;
+  document.getElementById('bottom').innerHTML = mode === 'cmd'
+    ? `:<input class="cmd" id="cmdin" value="${esc(cmdText)}" autofocus>`
+    : mode === 'filter' ? `/<input class="cmd" id="cmdin" value="${esc(filter)}" autofocus>` : keys;
+  if (mode !== 'normal') { const i = document.getElementById('cmdin'); i.focus(); i.setSelectionRange(99, 99); }
+
+  document.getElementById('overlay').innerHTML = showHelp ? `<div class="overlay">
+    <b style="color:#29ADFF">piko — keys</b><br><br>
+    j/k or arrows: move · enter: drill in · esc: back/up<br>
+    /: filter current list · t: trigger selected job · p: pause/unpause<br>
+    a: approve · x: reject or cancel · r: retry<br>
+    :pipelines :workers :audit :teams :settings :config — switch views<br><br>
+    <span class="mut">esc or ? to close</span></div>` : '';
+}
+
+window._click = i => { sel = i; const row = rows()[i]; if (row && row.go) location.hash = row.go; else App.refresh(); };
+
+document.addEventListener('keydown', e => {
+  const r = App.route(); const [v, a, b, c] = r;
+  if (mode === 'cmd' || mode === 'filter') {
+    if (e.key === 'Escape') { mode = 'normal'; if (mode === 'filter') filter = ''; App.refresh(); }
+    else if (e.key === 'Enter') {
+      const val = document.getElementById('cmdin').value;
+      if (mode === 'filter') { filter = val; }
+      else {
+        const cmd = val.trim();
+        if (cmd === 'help') showHelp = true;
+        else if (cmd === 'config' && v === 'jobs') { alert('config view: see variation 01-03 for editor; toast only here'); P.toast('(config editor not in terminal prototype)'); }
+        else if (['pipelines', 'workers', 'audit', 'teams', 'settings'].includes(cmd)) location.hash = '#/' + cmd;
+      }
+      mode = 'normal'; cmdText = ''; App.refresh();
+    } else { if (mode === 'filter') { setTimeout(() => { filter = document.getElementById('cmdin').value; App.refresh(); }, 0); } }
+    return;
+  }
+  if (showHelp && (e.key === 'Escape' || e.key === '?')) { showHelp = false; App.refresh(); return; }
+  if (e.key === '?') { showHelp = true; App.refresh(); return; }
+  if (e.key === ':') { mode = 'cmd'; cmdText = ''; App.refresh(); e.preventDefault(); return; }
+  if (e.key === '/') { mode = 'filter'; App.refresh(); e.preventDefault(); return; }
+
+  const rs = v === 'log' ? [] : rows();
+  const cur = rs[sel];
+  if (e.key === 'j' || e.key === 'ArrowDown') { sel = Math.min(sel + 1, rs.length - 1); App.refresh(); }
+  else if (e.key === 'k' || e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); App.refresh(); }
+  else if (e.key === 'Enter') { if (cur && cur.go) { location.hash = cur.go; sel = 0; } }
+  else if (e.key === 'Escape') {
+    filter = '';
+    if (v === 'log') { const bl = P.getBuild(a); history.back(); }
+    else if (v === 'builds') location.hash = `#/jobs/${a}/${b}`;
+    else if (v === 'jobs') location.hash = '#/pipelines';
+    else location.hash = '#/pipelines';
+    sel = 0;
+  }
+  else if (e.key === 't') {
+    if (v === 'jobs' && cur && cur.job) P.ACT.trigger(a, b, cur.job.name);
+    else if (v === 'builds') P.ACT.trigger(a, b, c);
+  }
+  else if (e.key === 'p') {
+    if (v === 'pipelines' && cur) P.ACT.pausePipeline(cur.pl.team, cur.pl.name);
+    else if (v === 'jobs' && cur && cur.job) P.ACT.pauseJob(a, b, cur.job.name);
+  }
+  else if (e.key === 'a') {
+    const bl = v === 'log' ? P.getBuild(a) : (cur && cur.build);
+    if (bl && bl.status === 'waiting_for_approval') P.ACT.approve(bl.id);
+  }
+  else if (e.key === 'x') {
+    const bl = v === 'log' ? P.getBuild(a) : (cur && cur.build);
+    if (bl && bl.status === 'waiting_for_approval') P.ACT.reject(bl.id);
+    else if (bl && bl.status === 'started') P.ACT.cancel(bl.id);
+  }
+  else if (e.key === 'r') {
+    const bl = v === 'log' ? P.getBuild(a) : (cur && cur.build);
+    if (bl) P.ACT.retry(bl.id);
+  }
+});
+App.start(render);
+</script>
+<div style="position:fixed;right:10px;bottom:6px;color:#4a423b;font-size:11px"><b>Variation 07 · Terminal</b> (k9s-inspired keyboard-first) · <a href="index.html" style="color:#6b615a">index</a></div>
+</body></html>

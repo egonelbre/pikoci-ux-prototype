@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PikoCI — preview</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="hdr"></div>
+<main id="main"></main>
+<footer style="padding:8px 20px;color:var(--mut);font-size:12px;border-top:1px solid var(--line)">
+  PikoCI UX preview — implements UX-PLAN v4.1 over fake data ·
+  try: approve the deploy · release the held fork PR · watch #143 run live ·
+  <span class="kbd">⌘K</span> palette · <span class="kbd">f</span> next failure ·
+  <a href="../prototypes/index.html">explorations</a>
+</footer>
+
+<script src="data.js"></script>
+<script src="core.js"></script>
+<script src="views-a.js"></script>
+<script src="views-b.js"></script>
+<script>
+(function () {
+  'use strict';
+  function render(route) {
+    document.getElementById('hdr').innerHTML = VIEWS.shell(route);
+    const m = document.getElementById('main');
+    const [a, b, c, d] = route;
+    const nav = P.navItems().map(i => i.id);
+    const gate = id => nav.includes(id) ? null : VIEWS.gated(id);
+
+    if (!a) m.innerHTML = VIEWS.home();
+    else if (a === 'pipelines') m.innerHTML = VIEWS.pipelines();
+    else if (a === 'p') m.innerHTML = VIEWS.pipeline(b, c, d);
+    else if (a === 'b') m.innerHTML = VIEWS.build(b);
+    else if (a === 'changes') m.innerHTML = gate('changes') || VIEWS.changes(b, c);
+    else if (a === 'environments') m.innerHTML = gate('environments') || VIEWS.environments(b);
+    else if (a === 'insights') m.innerHTML = VIEWS.gated('insights');
+    else if (a === 'queue') m.innerHTML = gate('queue') || VIEWS.queue();
+    else if (a === 'workers') m.innerHTML = gate('workers') || VIEWS.workers(b);
+    else if (a === 'audit') m.innerHTML = gate('audit') || VIEWS.audit();
+    else if (a === 'teams') m.innerHTML = VIEWS.teams();
+    else if (a === 'settings') m.innerHTML = VIEWS.settings();
+    else m.innerHTML = '<div class="page">Not found — <a href="#/">home</a></div>';
+  }
+  P.App.start(render);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>13 · Synthesis — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #e4ddd6; flex: none; }
+  header .logo { font-weight: 700; color: #1f1a16; }
+  header a { color: #4a423b; } header a.on { font-weight: 700; color: #1f1a16; }
+  .attnbadge { background: #8e44ad; color: #fff; border-radius: 10px; padding: 0 8px; font-size: 12px; }
+  .kbd { font-family: ui-monospace, Menlo, monospace; font-size: 11px; border: 1px solid #d5cdc5; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: #7a7168; background: #fff; }
+  main { flex: 1; min-height: 0; overflow: auto; }
+  /* home */
+  .home { max-width: 1060px; margin: 0 auto; padding: 16px 18px; }
+  .attn { border: 1px solid #e0d3ea; background: #faf6fd; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .attn .row { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid #efe6f5; }
+  .attn .row:last-child { border-bottom: none; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .plcard { border: 1px solid #e4ddd6; border-top: 4px solid #ccc; border-radius: 6px; background: #fff; padding: 10px 12px; display: block; color: inherit; position: relative; }
+  .plcard:hover { text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .star { position: absolute; right: 8px; top: 6px; cursor: pointer; color: #d5cdc5; }
+  .star.on { color: #FFA300; }
+  /* pipeline page */
+  .toolbar { display: flex; gap: 10px; align-items: center; padding: 9px 16px; border-bottom: 1px solid #e4ddd6; background: #fff; position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+  .views { display: flex; gap: 2px; background: #efeae5; border-radius: 6px; padding: 2px; }
+  .views a { padding: 3px 12px; border-radius: 5px; color: #4a423b; font-size: 13px; }
+  .views a.on { background: #fff; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  svg text { font: 12px -apple-system, sans-serif; pointer-events: none; }
+  .gnode { cursor: pointer; } .gnode:hover rect { stroke: #1f1a16; stroke-width: 2; }
+  .spark { display: inline-flex; align-items: flex-end; gap: 1px; height: 15px; }
+  .spark i { width: 4px; background: #b9cfe4; display: inline-block; border-radius: 1px 1px 0 0; }
+  .spark i.bad { background: #FF004D; }
+  /* build page */
+  .errsec { margin: 12px 16px; border: 1px solid #f2bccb; background: #fdeef2; border-radius: 8px; overflow: hidden; }
+  .errsec .h { padding: 8px 12px; color: #b3003a; font-weight: 700; }
+  .step { border: 1px solid #e4ddd6; border-radius: 6px; margin: 0 16px 8px; background: #fff; overflow: hidden; }
+  .stephead { display: flex; gap: 10px; align-items: center; padding: 7px 12px; cursor: pointer; }
+  .stephead:hover { background: #f8f4f0; }
+  /* waterfall */
+  .wfrow { display: flex; align-items: center; height: 28px; }
+  .wfrow .lbl { width: 200px; flex: none; display: flex; gap: 7px; align-items: center; font-size: 13px; }
+  .wfrow .lane { flex: 1; position: relative; height: 100%; border-left: 1px solid #eee7e0; }
+  .wfbar { position: absolute; top: 6px; height: 16px; border-radius: 3px; cursor: pointer; min-width: 6px; }
+  .wfbar:hover { outline: 2px solid #1f1a16; }
+  /* palette */
+  .palette { position: fixed; inset: 0; background: rgba(20,16,13,.45); z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+  .palbox { width: 560px; background: #fff; border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.3); overflow: hidden; }
+  .palbox input { width: 100%; border: none; outline: none; font: inherit; font-size: 16px; padding: 14px 16px; border-bottom: 1px solid #eee7e0; }
+  .palrow { display: flex; gap: 10px; align-items: center; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+  .palrow.sel { background: #eef3f8; }
+  .palrow .k { margin-left: auto; font-size: 11px; color: #b1a89f; }
+  footer { flex: none; padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<main id="main" data-keep-scroll></main>
+<div id="pal"></div>
+<footer><b>Variation 13 · Synthesis</b> — attention-first home · graph/table/runs as toggles · error-first build page · ⌘K everywhere · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+let favs = { 'main/pikoci': 1 };
+let palOpen = false, palQ = '', palSel = 0;
+let homeQ = '';
+
+// ---------- shared bits ----------
+function runsFor(pl) {
+  const map = new Map();
+  for (const b of P.pipelineBuilds(pl)) { if (!map.has(b.n)) map.set(b.n, []); map.get(b.n).push(b); }
+  return [...map.entries()].sort((x, y) => y[0] - x[0]).map(([n, builds]) => ({
+    n, builds, pl,
+    status: builds.map(b => b.status).sort((a, b) => P.RANK[a] - P.RANK[b])[0],
+    start: Math.min(...builds.map(b => b.start)),
+    end: builds.some(b => !b.end) ? null : Math.max(...builds.map(b => b.end)),
+  }));
+}
+function attnItems() {
+  const items = [];
+  for (const b of DATA.builds) {
+    if (b.status === 'waiting_for_approval') items.push({ pri: 0, icon: '⧖', cls: 'st-waiting_for_approval', b, text: `${b.pipeline} / ${b.job} #${b.n} waiting for your approval (1/2 — maria ✓)`, act: `<button class="btn primary sm" data-act="approve|${b.id}">Approve</button> <button class="btn danger sm" data-act="reject|${b.id}">Reject</button>` });
+    if (b.status === 'pending' && Date.now() - b.start > 10 * 60000) items.push({ pri: 2, icon: '⏳', cls: 'st-pending', b, text: `${b.pipeline} / ${b.job} #${b.n} stuck pending ${ago(b.start)} — no online worker with tag "terraform"`, act: `<a class="btn sm" href="#/workers">Workers</a>` });
+  }
+  for (const pl of DATA.pipelines) {
+    for (const j of pl.jobs) {
+      const s = P.jobStatus(pl, j.name);
+      if (s === 'failed' || s === 'errored') {
+        const b = P.latestBuild(pl, j.name);
+        items.push({ pri: 1, icon: '✕', cls: 'st-failed', b, text: `${pl.name} / ${j.name} failing since ${ago(b.start)}`, act: `<a class="btn sm" href="#/b/${b.id}">Log</a> <button class="btn sm" data-act="retry|${b.id}">↻ Retry</button>` });
+      }
+    }
+    for (const r of pl.resources) if (r.checkError) items.push({ pri: 2, icon: '⚠', cls: 'st-errored', pl, text: `${pl.name} / ${r.name} check failing — new versions not detected`, act: `<button class="btn sm" data-act="check|${pl.team}|${pl.name}|${r.name}">↻ Re-check</button> <a class="btn sm" href="#/p/${pl.team}/${pl.name}/graph">Open</a>` });
+  }
+  return items.sort((a, b) => a.pri - b.pri);
+}
+
+function header(route) {
+  const sec = route[0] || '';
+  const nAttn = attnItems().length;
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header>
+    <span class="logo">▞ PikoCI</span>
+    ${l('', 'Home', ['', 'p', 'b', 'run'].includes(sec))}
+    ${l('activity', 'Activity', sec === 'activity')}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Workers', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')}
+    ${nAttn ? `<a href="#/" class="attnbadge" title="needs attention">${nAttn}</a>` : ''}
+    <span class="sp"></span>
+    <span class="mut" style="cursor:pointer" onclick="window._pal(true)">search / actions <span class="kbd">⌘K</span></span>
+    ${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+
+// ---------- home: attention strip + card wall ----------
+function home() {
+  const items = attnItems();
+  const q = homeQ.toLowerCase();
+  const pls = DATA.pipelines.filter(pl => !q || (pl.team + '/' + pl.name + ' ' + pl.desc).toLowerCase().includes(q))
+    .sort((a, b) => (favs[b.team + '/' + b.name] ? 1 : 0) - (favs[a.team + '/' + a.name] ? 1 : 0));
+  return `<div class="home">
+    ${items.length ? `<div class="attn">${items.map(t => `
+      <div class="row"><span class="${t.cls}" style="width:18px;font-size:15px">${t.icon}</span>
+        <span style="flex:1">${esc(t.text)}</span>${t.act}</div>`).join('')}</div>`
+      : `<div class="okbox" style="margin-bottom:16px">✓ Nothing needs you — all green.</div>`}
+    <div class="filters">
+      <input placeholder="filter pipelines… ( / )" id="homeq" value="${esc(homeQ)}"
+        oninput="window._hq(this.value)" style="font:inherit;padding:4px 10px;border:1px solid #d5cdc5;border-radius:6px;width:240px">
+      <span class="mut" style="font-size:12px">★ favorites first · at ~100 pipelines this filter becomes the front door</span></div>
+    <div class="cards">
+    ${pls.map(pl => {
+      const s = P.pipelineStatus(pl);
+      const key = pl.team + '/' + pl.name;
+      const lastB = P.pipelineBuilds(pl)[0];
+      return `<a class="plcard" href="#/p/${pl.team}/${pl.name}/graph" style="border-top-color:${st(s).color}">
+        <span class="star ${favs[key] ? 'on' : ''}" onclick="event.preventDefault();window._fav('${key}')">★</span>
+        <div style="display:flex;gap:8px;align-items:center"><b>${esc(pl.name)}</b>
+          <span class="mut" style="font-size:12px">${esc(pl.team)}</span>
+          <span class="sp"></span><span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym}</span></div>
+        <div style="margin:8px 0">${P.miniGraphSVG(pl, 208, 46)}</div>
+        <div class="mut" style="font-size:12px" data-live-times>${pl.paused ? '❚❚ paused · ' : ''}${lastB ? '#' + lastB.n + ' · ' + ago(lastB.start) : 'no builds'}</div>
+      </a>`;
+    }).join('')}
+    </div></div>`;
+}
+
+// ---------- pipeline page: graph | table | runs toggles ----------
+function graphView(pl) {
+  const { team, name } = pl;
+  const g = P.layoutGraph(pl, { nodeW: 150, nodeH: 40, resW: 128, resH: 30, gapX: 90, gapY: 22, pad: 24 });
+  let svg = `<svg width="${g.w}" height="${g.h}" data-live-times>`;
+  for (const e of g.edges) {
+    const a = g.nodes[e.from], b = g.nodes[e.to];
+    if (!a || !b) continue;
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
+    svg += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${e.passed ? '#8a8178' : '#d5cdc5'}" stroke-width="${e.passed ? 2 : 1.5}" ${e.trigger === false ? 'stroke-dasharray="4 4"' : ''}/>`;
+  }
+  for (const [nm, n] of Object.entries(g.nodes)) {
+    if (n.kind === 'resource') {
+      const r = pl.resources.find(r => r.name === nm);
+      const border = r.checkError ? '#FA8072' : (r.pinned ? '#FFA300' : '#b9b2ab');
+      svg += `<g class="gnode" onclick="location.hash='#/p/${team}/${name}/r/${nm}'">
+        <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="14" fill="#fff" stroke="${border}" stroke-width="${r.pinned || r.checkError ? 3 : 1.5}"/>
+        <text x="${n.x + 12}" y="${n.y + n.h / 2 + 4}" fill="#4a423b">${r.pinned ? '📌 ' : ''}${r.checkError ? '⚠ ' : ''}${esc(nm)}</text></g>`;
+    } else {
+      const s = P.jobStatus(pl, nm);
+      const j = pl.jobs.find(j => j.name === nm);
+      const b = P.latestBuild(pl, nm);
+      svg += `<g class="gnode ${s === 'started' ? 'pulse' : ''}" onclick="location.hash='${b ? '#/b/' + b.id : `#/p/${team}/${name}/table`}'">
+        <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="4" fill="${st(s).color}"/>
+        <text x="${n.x + 10}" y="${n.y + 17}" fill="#fff" font-weight="600">${esc(nm)}${j.matrix ? ' ×' + j.matrix.length : ''}</text>
+        <text x="${n.x + 10}" y="${n.y + 32}" fill="rgba(255,255,255,.85)">${j.approve ? '⧖ gate · ' : ''}${b ? '#' + b.n + ' · ' + fmtDur(P.buildDur(b)) : 'no builds'}</text></g>`;
+    }
+  }
+  return `<div style="padding:20px;overflow:auto">${svg}</svg>
+    <div class="mut" style="font-size:12px;margin-top:10px">rounded = resource (📌 pinned, ⚠ check failing) · box = job → latest build · dashed = non-triggering</div></div>`;
+}
+function spark(pl, job) {
+  const bs = P.jobBuilds(pl, job).slice(0, 8).reverse();
+  const ds = bs.map(b => P.buildDur(b) || 0);
+  const max = Math.max(...ds, 1);
+  return `<span class="spark">${bs.map((b, i) => `<i style="height:${Math.max(ds[i] / max * 15, 2)}px" class="${['failed', 'errored'].includes(b.status) ? 'bad' : ''}" title="#${b.n}: ${fmtDur(ds[i])}"></i>`).join('')}</span>`;
+}
+function tableView(pl) {
+  return `<table class="tbl"><thead><tr><th>Last 5</th><th>Job</th><th>Last build</th><th>When</th><th>Duration / trend</th><th></th></tr></thead><tbody>
+    ${pl.jobs.map(j => {
+    const s = P.jobStatus(pl, j.name);
+    const b = P.latestBuild(pl, j.name);
+    return `<tr>
+      <td>${P.historyStrip(pl, j.name, 5)}</td>
+      <td><b>${esc(j.name)}</b>${j.matrix ? ' ×' + j.matrix.length : ''}${j.approve ? ' ⧖' : ''}${j.paused ? ' <span class="st-paused">❚❚</span>' : ''}</td>
+      <td>${b ? `<a class="st-${s} ${s === 'started' ? 'pulse' : ''}" href="#/b/${b.id}">${st(s).sym} #${b.n} ${st(s).label}</a>` : '<span class="mut">—</span>'}</td>
+      <td class="mut" data-live-times>${b ? ago(b.start) : ''}</td>
+      <td>${b ? fmtDur(P.buildDur(b)) : ''} ${spark(pl, j.name)}</td>
+      <td class="r">
+        <button class="btn sm" data-act="trigger|${pl.team}|${pl.name}|${j.name}">▶</button>
+        <button class="btn sm" data-act="pauseJob|${pl.team}|${pl.name}|${j.name}">${j.paused ? '▶❚' : '❚❚'}</button>
+        ${b && b.status === 'waiting_for_approval' ? `<button class="btn sm primary" data-act="approve|${b.id}">approve</button>` : ''}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+function runsView(pl) {
+  const runs = runsFor(pl);
+  return `<table class="tbl"><thead><tr><th></th><th>Run</th><th>Change</th><th>Jobs</th><th>When</th><th>Duration</th></tr></thead><tbody>
+    ${runs.map(r => {
+    const ref = Object.values(r.builds[0].versions)[0];
+    let msg = '';
+    for (const rs of pl.resources) { const v = (rs.versions || []).find(x => x.ref === ref); if (v && v.msg) { msg = v.msg; break; } }
+    return `<tr><td width="26"><span class="st-${r.status}">${st(r.status).sym}</span></td>
+      <td><a href="#/run/${pl.team}/${pl.name}/${r.n}"><b>#${r.n}</b></a></td>
+      <td class="mut"><code>${esc(String(ref).slice(0, 7))}</code> ${esc(msg)}</td>
+      <td><span class="hstrip">${r.builds.map(b => `<a class="hcell" href="#/b/${b.id}" title="${esc(b.job)}" style="background:${st(b.status).color}"></a>`).join('')}</span></td>
+      <td class="mut">${ago(r.start)}</td><td class="mut">${r.end ? fmtDur((r.end - r.start) / 1000) : '<span class="st-started pulse">running</span>'}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+function pipelinePage(team, name, view) {
+  const pl = P.getPipeline(team, name);
+  if (!pl) return '<div class="pg">not found</div>';
+  view = view || 'graph';
+  const s = P.pipelineStatus(pl);
+  const V = v => `<a class="${view === v ? 'on' : ''}" href="#/p/${team}/${name}/${v}">${v}</a>`;
+  return `<div class="toolbar">
+      <a href="#/">home</a> / <b style="font-size:15px">${esc(team)}/${esc(name)}</b>
+      <span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym} ${st(s).label}</span>
+      ${pl.public ? '<span class="chip">public</span>' : ''}
+      <span class="views">${V('graph')}${V('table')}${V('runs')}</span>
+      <span class="sp"></span>
+      <button class="btn sm" data-act="pausePipeline|${team}|${name}">${pl.paused ? '▶ Unpause' : '❚❚ Pause'}</button>
+      <a class="btn sm" href="#/p/${team}/${name}/config">Config</a></div>
+    ${view === 'graph' ? graphView(pl) : view === 'table' ? tableView(pl) : view === 'runs' ? runsView(pl) : ''}`;
+}
+
+// ---------- run page: waterfall ----------
+function runPage(team, name, n) {
+  const pl = P.getPipeline(team, name);
+  const run = runsFor(pl).find(r => r.n === +n);
+  if (!run) return '<div class="pg">not found</div>';
+  const t0 = run.start, t1 = Math.max(...run.builds.map(b => b.end || Date.now()));
+  const span = Math.max(t1 - t0, 1000);
+  return `<div class="toolbar"><a href="#/p/${team}/${name}/runs">${esc(name)} runs</a> / <b>run #${n}</b>
+      <span class="badge" style="background:${st(run.status).color}">${st(run.status).sym} ${st(run.status).label}</span>
+      <span class="mut" data-live-times>${ago(run.start)} · ${fmtDur(span / 1000)}</span></div>
+    <div style="padding:18px 16px">
+    ${run.builds.slice().sort((a, b) => a.start - b.start).map(b => {
+    const l = (b.start - t0) / span * 100, w = Math.max(((b.end || Date.now()) - b.start) / span * 100, .8);
+    return `<div class="wfrow">
+        <div class="lbl"><span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.job)}</span></div>
+        <div class="lane"><div class="wfbar ${b.status === 'started' ? 'pulse' : ''}" onclick="location.hash='#/b/${b.id}'"
+          style="left:${l}%;width:${w}%;background:${st(b.status).color}"></div></div>
+        <span class="mut" style="width:70px;text-align:right;font-size:12px">${b.end ? fmtDur((b.end - b.start) / 1000) : '…'}</span></div>`;
+  }).join('')}
+    <div class="mut" style="margin-top:10px;font-size:12px">wall clock <b>${fmtDur(span / 1000)}</b> · job time <b>${fmtDur(run.builds.reduce((a, b) => a + ((b.end || Date.now()) - b.start) / 1000, 0))}</b> · click a bar for the build</div>
+    </div>`;
+}
+
+// ---------- build page: error-first + collapsible steps ----------
+function buildPage(id) {
+  const b = P.getBuild(id);
+  if (!b) return '<div class="pg">not found</div>';
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const j = pl.jobs.find(x => x.name === b.job.split('/')[0]);
+  const failIdx = P.firstFailStep(b);
+  const errTail = failIdx >= 0 ? b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error/.test(l)).slice(0, 4) : [];
+  const builds = P.jobBuilds(pl, b.job.split('/')[0]);
+  return `<div class="toolbar">
+      <a href="#/p/${b.team}/${b.pipeline}/graph">${esc(b.pipeline)}</a> /
+      <b class="st-${b.status}">${st(b.status).sym} ${esc(b.job)} #${b.n}</b>
+      ${P.buildMeta(b)}
+      <span class="sp"></span>${P.buildActions(b)}</div>
+    <div class="toolbar" style="position:static;background:#faf8f6;border-bottom:1px solid #f0eae4">
+      <span class="mut" style="font-size:12px">history:</span>
+      ${builds.slice(0, 10).map(x => `<a class="st-${x.status}" style="${x.id === b.id ? 'font-weight:700;text-decoration:underline' : ''}" href="#/b/${x.id}" title="${ago(x.start)}">${st(x.status).sym}#${x.n}</a>`).join(' ')}
+      <span class="sp"></span><span class="mut" style="font-size:12px"><span class="kbd">f</span> next failure · <span class="kbd">⌘K</span> actions</span></div>
+    ${b.status === 'waiting_for_approval' ? `<div class="warnbox" style="margin:12px 16px">⧖ <b>${esc(j && j.approve ? j.approve.name : 'approval')}</b> — 1/${j && j.approve ? j.approve.need : 2} approvals (maria ✓)
+      <button class="btn primary sm" data-act="approve|${b.id}">Approve</button>
+      <button class="btn danger sm" data-act="reject|${b.id}">Reject</button></div>` : ''}
+    ${failIdx >= 0 ? `<div class="errsec"><div class="h">✕ first failure: ${esc(b.steps[failIdx].name)}
+        <a style="font-weight:400;font-size:13px" href="javascript:void(0)" onclick="document.getElementById('step-${failIdx}').scrollIntoView({behavior:'smooth'})">jump ↓</a></div>
+      <pre class="log" style="padding:4px 0">${errTail.map(l => `<span class="ln"><span class="lno">·</span><span class="l-err">${esc(l)}</span></span>`).join('\n')}</pre></div>` : ''}
+    <div style="padding:12px 0" ${b.status === 'started' ? 'data-follow' : ''} id="steps">
+    ${b.steps.map((sp, i) => `<div class="step" id="step-${i}">
+      <div class="stephead" onclick="const l=this.nextElementSibling;l.style.display=l.style.display==='none'?'':'none'">
+        <span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}" style="width:14px">${st(sp.status).sym}</span>
+        <span class="mut" style="width:46px;font-size:11px;text-transform:uppercase">${sp.type}</span><b>${esc(sp.name)}</b>
+        <span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+      <div style="display:${sp.status === 'failed' || sp.status === 'started' ? '' : 'none'}">${sp.log.length ? P.renderLog(sp.log, { id: 's' + i }) : '<div class="pad mut">no output</div>'}</div>
+    </div>`).join('')}</div>`;
+}
+
+// ---------- resource page ----------
+function resourcePage(team, name, res) {
+  const pl = P.getPipeline(team, name);
+  const r = pl.resources.find(x => x.name === res);
+  return `<div class="toolbar"><a href="#/p/${team}/${name}/graph">${esc(name)}</a> / <b>${esc(res)}</b>
+      <span class="chip">${esc(r.type)}</span><span class="sp"></span>
+      <button class="btn sm" data-act="check|${team}|${name}|${res}">↻ Check now</button></div>
+    <div class="pg">
+    ${r.checkError ? `<div class="errbox">⚠ check failing ${ago(r.lastCheck)}: <code>${esc(r.checkError)}</code></div>`
+      : `<div class="okbox">✓ checked ${ago(r.lastCheck)} · every <code>${esc(r.checkEvery)}</code></div>`}
+    <table class="tbl">${r.versions.map(v => `<tr><td width="20">${r.pinned === v.ref ? '📌' : ''}</td>
+      <td><code>${esc(v.ref)}</code></td><td>${esc(v.msg || '')} ${v.author ? '<span class="mut">· ' + esc(v.author) + '</span>' : ''}</td>
+      <td class="mut nowrap">${ago(v.at)}</td>
+      <td class="r nowrap"><button class="btn sm" data-act="pin|${team}|${name}|${res}|${v.ref}">${r.pinned === v.ref ? 'Unpin' : 'Pin'}</button>
+      <button class="btn sm" data-act="noop">▶ with version</button></td></tr>`).join('')}</table></div>`;
+}
+
+// ---------- activity feed (secondary) ----------
+function activity() {
+  const builds = DATA.builds.slice().sort((a, b) => b.start - a.start).slice(0, 30);
+  return `<div class="pg" style="max-width:760px"><h1>Activity</h1>
+    ${builds.map(b => `<div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid #f0eae4">
+      <span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym}</span>
+      <a href="#/b/${b.id}" style="flex:1"><b>${esc(b.pipeline)}</b> / ${esc(b.job)} #${b.n}</a>
+      <span class="mut" style="font-size:12px">${b.trigger.kind === 'manual' ? '▶ ' + esc(b.trigger.user) : esc(b.trigger.detail || b.trigger.kind)}</span>
+      <span class="mut nowrap" style="font-size:12px;width:110px;text-align:right" data-live-times>${ago(b.start)} · ${fmtDur(P.buildDur(b)) || '—'}</span>
+    </div>`).join('')}</div>`;
+}
+
+// ---------- command palette ----------
+function palItems() {
+  const q = palQ.toLowerCase();
+  const items = [];
+  for (const b of P.needsApproval()) items.push({ label: `⧖ Approve ${b.pipeline}/${b.job} #${b.n}`, k: 'action', run: () => P.ACT.approve(b.id) });
+  for (const pl of DATA.pipelines) {
+    items.push({ label: `${st(P.pipelineStatus(pl)).sym} ${pl.team}/${pl.name}`, k: 'pipeline', run: () => location.hash = `#/p/${pl.team}/${pl.name}/graph` });
+    for (const j of pl.jobs) items.push({ label: `${pl.name} › ${j.name}`, k: 'job', run: () => { const b = P.latestBuild(pl, j.name); location.hash = b ? '#/b/' + b.id : `#/p/${pl.team}/${pl.name}/table`; } });
+    for (const j of pl.jobs) items.push({ label: `▶ trigger ${pl.name} › ${j.name}`, k: 'action', run: () => P.ACT.trigger(pl.team, pl.name, j.name) });
+  }
+  items.push({ label: '⚙ Workers', k: 'page', run: () => location.hash = '#/workers' });
+  items.push({ label: '☰ Audit log', k: 'page', run: () => location.hash = '#/audit' });
+  items.push({ label: '👥 Teams', k: 'page', run: () => location.hash = '#/teams' });
+  return items.filter(i => !q || i.label.toLowerCase().includes(q)).slice(0, 9);
+}
+function renderPal() {
+  const el = document.getElementById('pal');
+  if (!palOpen) { el.innerHTML = ''; return; }
+  const items = palItems();
+  if (palSel >= items.length) palSel = Math.max(0, items.length - 1);
+  el.innerHTML = `<div class="palette" onclick="if(event.target===this)window._pal(false)">
+    <div class="palbox">
+      <input id="palin" placeholder="Jump to pipeline / job, or run an action…" value="${esc(palQ)}"
+        oninput="window._palq(this.value)" onkeydown="window._palkey(event)">
+      ${items.map((it, i) => `<div class="palrow ${i === palSel ? 'sel' : ''}" onclick="window._palgo(${i})">
+        ${esc(it.label)}<span class="k">${it.k}</span></div>`).join('')}
+      ${!items.length ? '<div class="palrow mut">no matches</div>' : ''}
+    </div></div>`;
+  const inp = document.getElementById('palin');
+  inp.focus(); inp.setSelectionRange(999, 999);
+}
+window._pal = v => { palOpen = v; palQ = ''; palSel = 0; renderPal(); };
+window._palq = v => { palQ = v; palSel = 0; renderPal(); };
+window._palgo = i => { const it = palItems()[i]; palOpen = false; renderPal(); if (it) it.run(); };
+window._palkey = e => {
+  if (e.key === 'ArrowDown') { palSel++; renderPal(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { palSel = Math.max(0, palSel - 1); renderPal(); e.preventDefault(); }
+  else if (e.key === 'Enter') window._palgo(palSel);
+  else if (e.key === 'Escape') window._pal(false);
+};
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { window._pal(!palOpen); e.preventDefault(); return; }
+  if (palOpen || e.target.tagName === 'INPUT') return;
+  if (e.key === '/') { const q = document.getElementById('homeq'); if (q) { q.focus(); e.preventDefault(); } }
+  if (e.key === 'f') { // next failure: next .l-err line
+    const errs = [...document.querySelectorAll('.l-err')];
+    if (!errs.length) return;
+    window._fi = ((window._fi ?? -1) + 1) % errs.length;
+    errs[window._fi].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
+window._fav = k => { favs[k] = !favs[k]; App.refresh(); };
+window._hq = v => { homeQ = v; App.refresh(); const q = document.getElementById('homeq'); if (q) { q.focus(); q.setSelectionRange(999, 999); } };
+
+// ---------- router ----------
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b, c, d, e] = r;
+  if (!a) m.innerHTML = home();
+  else if (a === 'activity') m.innerHTML = activity();
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else if (a === 'b') m.innerHTML = buildPage(b);
+  else if (a === 'run') m.innerHTML = runPage(b, c, d);
+  else if (a === 'p' && d === 'config') m.innerHTML = Pages.editor(b, c);
+  else if (a === 'p' && d === 'r') m.innerHTML = resourcePage(b, c, e);
+  else if (a === 'p') m.innerHTML = pipelinePage(b, c, d);
+  else m.innerHTML = '<div class="pg">Not found</div>';
+  renderPal();
+}
+App.start(render);
+</script>
+</body></html>

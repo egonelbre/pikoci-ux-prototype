@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>06 · Miller columns — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #e4ddd6; flex: none; }
+  header .logo { font-weight: 700; color: #6d5ca8; }
+  .cols { flex: 1; display: flex; min-height: 0; }
+  .col { width: 200px; flex: none; border-right: 1px solid #e4ddd6; overflow: auto; background: #faf8f6; }
+  .col h4 { margin: 0; padding: 9px 12px 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #7a7168; position: sticky; top: 0; background: #faf8f6; }
+  .col a.it { display: flex; gap: 7px; align-items: center; padding: 6px 12px; color: #1f1a16; font-size: 13px; }
+  .col a.it:hover { background: #f0eae4; text-decoration: none; }
+  .col a.it.on { background: #6d5ca8; color: #fff; }
+  .col a.it.on .mut { color: #d5cde2; }
+  .col a.it .mut { font-size: 11px; }
+  .detail { flex: 1; min-width: 0; overflow: auto; background: #fff; }
+  .dhead { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #e4ddd6; position: sticky; top: 0; background: #fff; z-index: 3; }
+  .crumbline { padding: 5px 16px; font-size: 12px; color: #7a7168; border-bottom: 1px solid #f0eae4; background: #fff; flex: none; }
+  footer { flex: none; padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<header><span class="logo">▞ PikoCI</span><span class="mut">columns</span><span class="sp"></span>
+  <input id="jump" placeholder="Jump… (type to filter columns)" style="font:inherit;padding:3px 9px;border:1px solid #d5cdc5;border-radius:5px;width:240px"></header>
+<div class="crumbline" id="crumbs"></div>
+<div class="cols" id="cols"></div>
+<footer><b>Variation 06 · Miller columns</b> (Finder/TeamCity-tree-inspired: team → pipeline → job → build drill-down, all levels visible at once) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+// route: #/<team|~special>/<pipeline>/<job|@resource>/<buildId|version>
+function it(href, on, icon, label, sub) {
+  return `<a class="it ${on ? 'on' : ''}" href="${href}">${icon}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span>${sub ? `<span class="mut">${sub}</span>` : ''}</a>`;
+}
+
+function render(r) {
+  const [team, plName, jobOrRes, sel] = r;
+  const cols = [];
+
+  // col 1: teams + app sections
+  cols.push(`<div class="col" data-keep-scroll id="c1"><h4>Teams</h4>
+    ${DATA.teams.map(t => {
+      const worst = P.teamPipelines(t.name).map(pl => P.pipelineStatus(pl)).sort((a, b) => P.RANK[a] - P.RANK[b])[0] || 'none';
+      return it(`#/${t.name}`, team === t.name, `<span class="st-${worst}">${st(worst).sym}</span>`, esc(t.name), P.teamPipelines(t.name).length);
+    }).join('')}
+    <h4>System</h4>
+    ${it('#/~workers', team === '~workers', '⚙', 'Workers', DATA.workers.filter(w => w.status === 'online').length + '/' + DATA.workers.length)}
+    ${it('#/~audit', team === '~audit', '☰', 'Audit log')}
+    ${it('#/~teams', team === '~teams', '👥', 'Members')}
+    ${it('#/~settings', team === '~settings', '⚙', 'Settings')}
+  </div>`);
+
+  let detailHTML = null;
+  if (team && team.startsWith('~')) {
+    detailHTML = { '~workers': Pages.workers(), '~audit': Pages.audit({}), '~teams': Pages.teams(), '~settings': Pages.settings() }[team] || 'not found';
+  } else if (team) {
+    // col 2: pipelines
+    cols.push(`<div class="col" data-keep-scroll id="c2"><h4>Pipelines · ${esc(team)}</h4>
+      ${P.teamPipelines(team).map(pl => {
+      const s = P.pipelineStatus(pl);
+      return it(`#/${team}/${pl.name}`, plName === pl.name,
+        `<span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym}</span>`, esc(pl.name), pl.paused ? '❚❚' : '');
+    }).join('')}</div>`);
+
+    const pl = plName ? P.getPipeline(team, plName) : null;
+    if (pl) {
+      // col 3: jobs + resources + config
+      cols.push(`<div class="col" data-keep-scroll id="c3"><h4>Jobs</h4>
+        ${pl.jobs.map(j => {
+        const s = P.jobStatus(pl, j.name);
+        return it(`#/${team}/${plName}/${j.name}`, jobOrRes === j.name,
+          `<span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym}</span>`,
+          esc(j.name) + (j.approve ? ' ⧖' : '') + (j.matrix ? ' ×' + j.matrix.length : ''), '');
+      }).join('')}
+        <h4>Resources</h4>
+        ${pl.resources.map(rs => it(`#/${team}/${plName}/@${rs.name}`, jobOrRes === '@' + rs.name,
+        rs.checkError ? '⚠' : (rs.pinned ? '📌' : '↻'), esc(rs.name), '')).join('')}
+        <h4>Pipeline</h4>
+        ${it(`#/${team}/${plName}/%23config`, jobOrRes === '#config', '⌨', 'Config (HCL)', '')}
+      </div>`);
+
+      if (jobOrRes === '#config') {
+        detailHTML = Pages.editor(team, plName);
+      } else if (jobOrRes && jobOrRes.startsWith('@')) {
+        // col 4: versions
+        const rs = pl.resources.find(x => x.name === jobOrRes.slice(1));
+        cols.push(`<div class="col" data-keep-scroll id="c4"><h4>Versions</h4>
+          ${rs.versions.map(v => it(`#/${team}/${plName}/${jobOrRes}/${v.ref}`, sel === v.ref,
+          rs.pinned === v.ref ? '📌' : '·', `<code>${esc(String(v.ref).slice(0, 7))}</code>`, ago(v.at))).join('')}</div>`);
+        const v = rs.versions.find(x => x.ref === sel) || rs.versions[0];
+        detailHTML = `<div class="dhead"><b>${esc(rs.name)}</b><span class="chip">${esc(rs.type)}</span>
+            ${rs.pinned ? `<span class="st-started">📌 pinned ${esc(rs.pinned)}</span>` : ''}<span class="sp"></span>
+            <button class="btn" data-act="check|${team}|${plName}|${rs.name}">↻ Check</button></div>
+          <div class="pg">
+          ${rs.checkError ? `<div class="errbox">⚠ last check: <code>${esc(rs.checkError)}</code></div>` : `<div class="okbox">✓ checked ${ago(rs.lastCheck)} (every <code>${esc(rs.checkEvery)}</code>)</div>`}
+          ${v ? `<h2>Version <code>${esc(v.ref)}</code></h2>
+            <p>${esc(v.msg || '')} ${v.author ? '<span class="mut">by ' + esc(v.author) + ' · ' + ago(v.at) + '</span>' : ''}</p>
+            <button class="btn" data-act="pin|${team}|${plName}|${rs.name}|${v.ref}">${rs.pinned === v.ref ? 'Unpin' : '📌 Pin this version'}</button>
+            <button class="btn" data-act="noop">▶ Trigger downstream with this version</button>` : ''}
+          </div>`;
+      } else if (jobOrRes) {
+        // col 4: builds of job
+        const builds = P.jobBuilds(pl, jobOrRes);
+        const j = pl.jobs.find(x => x.name === jobOrRes);
+        cols.push(`<div class="col" data-keep-scroll id="c4"><h4>Builds
+            <a style="float:right" title="trigger" href="javascript:void(0)" onclick="P.ACT.trigger('${team}','${plName}','${jobOrRes}')">▶</a></h4>
+          ${builds.map(b => it(`#/${team}/${plName}/${jobOrRes}/${b.id}`, sel === b.id,
+          `<span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym}</span>`,
+          '#' + b.n + (b.job.includes('/') ? ' ' + b.job.split('/')[1] : ''), ago(b.start))).join('')}</div>`);
+        const b = sel ? P.getBuild(sel) : builds[0];
+        detailHTML = b ? `<div class="dhead">
+            <b class="st-${b.status}">${st(b.status).sym} ${esc(b.job)} #${b.n}</b>${P.buildMeta(b)}
+            <span class="sp"></span>${P.buildActions(b)}
+            <button class="btn sm" data-act="pauseJob|${team}|${plName}|${jobOrRes}">${j.paused ? 'Unpause' : 'Pause'}</button></div>
+          ${b.status === 'waiting_for_approval' ? `<div class="warnbox" style="margin:12px 16px">⧖ <b>${esc(j.approve.name)}</b> — 1/${j.approve.need} approvals (maria ✓)</div>` : ''}
+          <div style="padding:12px 16px">
+          ${b.steps.map((sp, i) => `<div class="card">
+            <div class="cardhead"><span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
+              <span class="mut">${sp.type}</span><b>${esc(sp.name)}</b><span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+            ${sp.log.length ? P.renderLog(sp.log, { id: 'm' + i }) : ''}</div>`).join('')}
+          </div>` : `<div class="pg mut">No builds yet.</div>`;
+      } else {
+        detailHTML = `<div class="pg"><h1>${esc(team)}/${esc(plName)}</h1>
+          <p class="mut">${esc(pl.desc)} ${pl.public ? '· public' : ''} ${pl.paused ? '· ❚❚ paused' : ''}</p>
+          <p>${P.miniGraphSVG(pl, 420, 110)}</p>
+          <p><button class="btn" data-act="pausePipeline|${team}|${plName}">${pl.paused ? '▶ Unpause' : '❚❚ Pause'}</button></p>
+          <p class="mut">Select a job or resource in the third column.</p></div>`;
+      }
+    } else {
+      detailHTML = `<div class="pg mut">Select a pipeline.</div>`;
+    }
+  } else {
+    // nothing selected: overview
+    detailHTML = `<div class="pg"><h1>PikoCI</h1><p class="mut">Select a team on the left, or jump with the search box.</p>
+      <h2>Needs attention</h2>
+      ${DATA.pipelines.flatMap(pl => P.pipelineAttention(pl).map(a => `<div style="padding:3px 0">
+        ${a.kind === 'approval' ? `<span class="st-waiting_for_approval">⧖</span> <a href="#/${pl.team}/${pl.name}/${a.job}">${esc(pl.name)} / ${esc(a.job)}</a> needs approval`
+        : a.kind === 'check-error' ? `<span class="st-errored">!</span> <a href="#/${pl.team}/${pl.name}/@${a.res}">${esc(pl.name)} / ${esc(a.res)}</a> check failing`
+          : `<span class="st-failed">✕</span> <a href="#/${pl.team}/${pl.name}/${a.job}">${esc(pl.name)} / ${esc(a.job)}</a> failed`}</div>`)).join('') || '<span class="mut">all green ✓</span>'}
+      <h2>Running now</h2>
+      ${P.runningBuilds().map(b => `<div><span class="st-started pulse">●</span> <a href="#/${b.team}/${b.pipeline}/${b.job.split('/')[0]}/${b.id}">${esc(b.pipeline)} / ${esc(b.job)} #${b.n}</a></div>`).join('') || '<span class="mut">idle</span>'}
+    </div>`;
+  }
+
+  document.getElementById('cols').innerHTML = cols.join('') + `<div class="detail" id="detail" data-keep-scroll>${detailHTML}</div>`;
+  document.getElementById('crumbs').innerHTML =
+    `<a href="#/">PikoCI</a>${team ? ' › <a href="#/' + team + '">' + esc(team) + '</a>' : ''}${plName ? ' › <a href="#/' + team + '/' + plName + '">' + esc(plName) + '</a>' : ''}${jobOrRes ? ' › ' + esc(jobOrRes.replace('@', '')) : ''}${sel ? ' › ' + esc(String(sel).slice(0, 9)) : ''}`;
+}
+App.start(render);
+</script>
+</body></html>

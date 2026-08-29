@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>11 · Attention inbox — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 9px 18px; background: #fff; border-bottom: 2px solid #1f1a16; }
+  header .logo { font-weight: 700; }
+  header a.on { font-weight: 700; border-bottom: 2px solid #1f1a16; }
+  .cols { display: flex; gap: 18px; max-width: 1150px; margin: 0 auto; padding: 18px 16px; align-items: flex-start; }
+  .inbox { flex: 1.4; min-width: 0; }
+  .side { flex: 1; min-width: 0; position: sticky; top: 60px; }
+  .task { background: #fff; border: 1px solid #e4ddd6; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .task .h { display: flex; gap: 10px; align-items: center; padding: 10px 14px; }
+  .task .why { padding: 0 14px 4px 40px; color: #7a7168; font-size: 13px; }
+  .task .acts { display: flex; gap: 8px; padding: 8px 14px 12px 40px; align-items: center; }
+  .task.p0 { border-left: 5px solid #8e44ad; }
+  .task.p1 { border-left: 5px solid #FF004D; }
+  .task.p2 { border-left: 5px solid #FA8072; }
+  .task.p3 { border-left: 5px solid #83769C; }
+  .zero { text-align: center; padding: 50px 20px; color: #7a7168; }
+  .sideitem { display: flex; gap: 9px; align-items: center; padding: 6px 4px; border-bottom: 1px solid #f0eae4; font-size: 13px; }
+  .lg { max-height: 220px; overflow: auto; margin: 0 14px 10px 40px; border-radius: 6px; }
+  footer { padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<div id="main"></div>
+<footer><b>Variation 11 · Attention inbox</b> (novel: the home screen is a triage queue of everything that needs a human, ranked; green work stays out of the way) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+let openLogs = {};
+
+function header(route) {
+  const sec = route[0] || '';
+  const n = inboxItems().length;
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', `Inbox${n ? ' (' + n + ')' : ''}`, sec === '')} ${l('all', 'Everything', ['all', 'b'].includes(sec))}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Workers', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')} <span class="sp"></span>${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+
+// The inbox: ranked list of "things that need a human"
+function inboxItems() {
+  const items = [];
+  for (const b of DATA.builds) {
+    if (b.status === 'waiting_for_approval') items.push({
+      pri: 0, kind: 'approve', b,
+      title: `Approve: ${b.pipeline} / ${b.job} #${b.n}`,
+      why: `Deploy gate "deploy to production" needs 2 approvals — maria approved ${ago(Date.now() - 12 * 60000)}, yours is the missing one. Everything upstream is green.`,
+    });
+    if (b.status === 'pending' && Date.now() - b.start > 10 * 60000) items.push({
+      pri: 2, kind: 'stuck', b,
+      title: `Stuck: ${b.pipeline} / ${b.job} #${b.n} pending ${ago(b.start)}`,
+      why: `No online worker matches its tags. builder-gpu has tag "terraform" but went stale 3h ago.`,
+    });
+  }
+  for (const pl of DATA.pipelines) {
+    for (const j of pl.jobs) {
+      const s = P.jobStatus(pl, j.name);
+      if (s === 'failed' || s === 'errored') {
+        const b = P.latestBuild(pl, j.name);
+        const prevOk = P.jobBuilds(pl, j.name).find(x => x.status === 'succeeded');
+        items.push({
+          pri: 1, kind: 'failed', b, pl, job: j.name,
+          title: `Fix: ${pl.name} / ${j.name} ${b ? '#' + b.n : ''} failing`,
+          why: `Failing since ${ago(b.start)}${prevOk ? ` · last green was #${prevOk.n} (${ago(prevOk.start)})` : ''}. First error shown below.`,
+        });
+      }
+    }
+    for (const r of pl.resources) if (r.checkError) items.push({
+      pri: 2, kind: 'check', pl, res: r,
+      title: `Resource check failing: ${pl.name} / ${r.name}`,
+      why: r.checkError + ` — new versions are not being detected; builds won't trigger from this resource.`,
+    });
+    if (pl.paused) items.push({
+      pri: 3, kind: 'paused', pl,
+      title: `Still paused: ${pl.team}/${pl.name}`,
+      why: `Paused by egon ${ago(Date.now() - 5 * 3600 * 1000)} (resource git.pikoci pinned to f0b6d15). Intentional?`,
+    });
+  }
+  return items.sort((a, b) => a.pri - b.pri);
+}
+
+function taskCard(t, i) {
+  const icon = { approve: '⧖', failed: '✕', check: '⚠', stuck: '⏳', paused: '❚❚' }[t.kind];
+  const iconCls = { approve: 'st-waiting_for_approval', failed: 'st-failed', check: 'st-errored', stuck: 'st-pending', paused: 'st-paused' }[t.kind];
+  let acts = '', extra = '';
+  if (t.kind === 'approve') acts = `<button class="btn primary" data-act="approve|${t.b.id}">✓ Approve</button>
+    <button class="btn danger" data-act="reject|${t.b.id}">✕ Reject</button>
+    <a class="btn" href="#/b/${t.b.id}">View build</a>`;
+  else if (t.kind === 'failed') {
+    const failIdx = t.b ? P.firstFailStep(t.b) : -1;
+    acts = `<button class="btn primary" data-act="retry|${t.b.id}">↻ Retry</button>
+      <a class="btn" href="#/b/${t.b.id}">Full log</a>
+      <button class="btn" onclick="window._log(${i})">${openLogs[i] ? 'Hide' : 'Show'} error</button>`;
+    if (openLogs[i] && failIdx >= 0) {
+      const log = t.b.steps[failIdx].log;
+      const errAt = log.findIndex(l => /FAIL|ERROR/.test(l));
+      extra = `<div class="lg">${P.renderLog(log.slice(Math.max(0, errAt - 2), errAt + 6))}</div>`;
+    }
+  }
+  else if (t.kind === 'check') acts = `<button class="btn" data-act="check|${t.pl.team}|${t.pl.name}|${t.res.name}">↻ Re-check now</button>
+    <a class="btn" href="#/all">Resource settings</a>`;
+  else if (t.kind === 'stuck') acts = `<a class="btn" href="#/workers">View workers</a>
+    <button class="btn" data-act="cancel|${t.b.id}">Cancel build</button>`;
+  else if (t.kind === 'paused') acts = `<button class="btn" data-act="pausePipeline|${t.pl.team}|${t.pl.name}">▶ Unpause</button>
+    <a class="btn" href="#/all">Keep paused</a>`;
+  return `<div class="task p${t.pri}">
+    <div class="h"><span class="${iconCls}" style="font-size:17px;width:20px">${icon}</span>
+      <b style="flex:1">${esc(t.title)}</b>
+      <span class="mut" style="font-size:12px">${t.pri === 0 ? 'blocking humans' : t.pri === 1 ? 'broken' : t.pri === 2 ? 'degraded' : 'fyi'}</span></div>
+    <div class="why">${esc(t.why)}</div>${extra}
+    <div class="acts">${acts}</div></div>`;
+}
+
+function inbox() {
+  const items = inboxItems();
+  const running = P.runningBuilds();
+  return `<div class="cols">
+    <div class="inbox">
+      <h1>Needs attention <span class="mut" style="font-weight:400">(${items.length})</span></h1>
+      ${items.length ? items.map(taskCard).join('') : `<div class="zero"><div style="font-size:40px">✓</div>All clear. CI needs nothing from you.</div>`}
+    </div>
+    <div class="side">
+      <h2 style="margin-top:0">Running now</h2>
+      ${running.map(b => `<div class="sideitem"><span class="st-started pulse">●</span>
+        <a href="#/b/${b.id}" style="flex:1">${esc(b.pipeline)} / ${esc(b.job)} #${b.n}</a>
+        <span class="mut" data-live-times>${fmtDur(P.buildDur(b))}</span></div>`).join('') || '<div class="mut">idle</div>'}
+      <h2>Pipelines</h2>
+      ${DATA.pipelines.map(pl => {
+    const s = P.pipelineStatus(pl);
+    return `<div class="sideitem"><span class="st-${s}">${st(s).sym}</span>
+        <a href="#/all" style="flex:1">${esc(pl.team)}/${esc(pl.name)}</a>
+        ${P.miniGraphSVG(pl, 90, 22)}</div>`;
+  }).join('')}
+      <h2>Recent green <span class="mut" style="font-weight:400">(collapsed on purpose)</span></h2>
+      ${DATA.builds.filter(b => b.status === 'succeeded').sort((a, b) => b.start - a.start).slice(0, 5).map(b =>
+    `<div class="sideitem"><span class="st-succeeded">✓</span><a href="#/b/${b.id}" style="flex:1">${esc(b.pipeline)}/${esc(b.job)} #${b.n}</a><span class="mut">${ago(b.start)}</span></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function allPage() {
+  return `<div class="pg" style="max-width:1000px"><h1>Everything</h1>
+    ${DATA.teams.map(t => `<h2>${esc(t.name)}</h2>
+      <table class="tbl">${P.teamPipelines(t.name).map(pl => {
+    const s = P.pipelineStatus(pl);
+    return `<tr><td width="26"><span class="st-${s}">${st(s).sym}</span></td>
+        <td><b>${esc(pl.name)}</b> <span class="mut">${esc(pl.desc)}</span></td>
+        <td>${P.miniGraphSVG(pl, 160, 34)}</td>
+        <td>${pl.jobs.map(j => { const lb = P.latestBuild(pl, j.name); return lb ? `<a class="st-${P.jobStatus(pl, j.name)}" title="${esc(j.name)}" href="#/b/${lb.id}">${st(P.jobStatus(pl, j.name)).sym}</a>` : ''; }).join(' ')}</td>
+        <td class="r"><button class="btn sm" data-act="pausePipeline|${pl.team}|${pl.name}">${pl.paused ? '▶' : '❚❚'}</button></td></tr>`;
+  }).join('')}</table>`).join('')}</div>`;
+}
+
+function buildPage(id) {
+  const b = P.getBuild(id);
+  if (!b) return '<div class="pg">not found</div>';
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const j = pl.jobs.find(x => x.name === b.job.split('/')[0]);
+  return `<div class="pg" style="max-width:900px">
+    <h1><a href="#/">← inbox</a> · <span class="st-${b.status}">${st(b.status).sym}</span> ${esc(b.pipeline)} / ${esc(b.job)} #${b.n}</h1>
+    <p>${P.buildMeta(b)} ${P.buildActions(b)}</p>
+    ${b.status === 'waiting_for_approval' ? `<div class="warnbox">⧖ <b>${esc(j.approve.name)}</b> — 1/${j.approve.need} approvals (maria ✓)</div>` : ''}
+    ${b.steps.map((sp, i) => `<div class="card">
+      <div class="cardhead"><span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
+        <span class="mut">${sp.type}</span><b>${esc(sp.name)}</b><span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+      ${sp.log.length ? P.renderLog(sp.log, { id: 'a' + i }) : ''}</div>`).join('')}</div>`;
+}
+
+window._log = i => { openLogs[i] = !openLogs[i]; App.refresh(); };
+
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b] = r;
+  if (!a) m.innerHTML = inbox();
+  else if (a === 'all') m.innerHTML = allPage();
+  else if (a === 'b') m.innerHTML = buildPage(b);
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else m.innerHTML = `<div class="pg">Not found</div>`;
+}
+App.start(render);
+</script>
+</body></html>

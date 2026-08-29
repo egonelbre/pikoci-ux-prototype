@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>09 · Activity feed — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 9px 18px; background: #fff; border-bottom: 1px solid #e4ddd6; }
+  header .logo { font-weight: 700; color: #e8590c; }
+  header a.on { font-weight: 700; }
+  .feed { max-width: 720px; margin: 0 auto; padding: 14px 12px 60px; }
+  .dayhead { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #7a7168; margin: 18px 4px 8px; }
+  .item { background: #fff; border: 1px solid #e4ddd6; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .itemhead { display: flex; gap: 10px; align-items: center; padding: 10px 14px; cursor: pointer; }
+  .itemhead:hover { background: #fbf6f1; }
+  .itembody { border-top: 1px solid #f0eae4; }
+  .stepline { display: flex; gap: 8px; align-items: center; padding: 5px 14px; font-size: 13px; border-bottom: 1px solid #f6f1ec; }
+  .lg { max-height: 260px; overflow: auto; }
+  .needme { border-left: 4px solid #8e44ad; }
+  .failed-item { border-left: 4px solid #FF004D; }
+  .running-item { border-left: 4px solid #FFA300; }
+  footer { padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; position: fixed; bottom: 0; left: 0; right: 0; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<div id="main"></div>
+<footer><b>Variation 09 · Activity feed</b> (Vercel-inspired: one reverse-chron stream of everything, expand in place, act in place) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+let expanded = {};
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', 'Feed', sec === '' || sec === 'f')} ${l('pipelines', 'Pipelines', sec === 'pipelines')}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Workers', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')} <span class="sp"></span>${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+
+function commitOf(b) {
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const ref = Object.values(b.versions)[0];
+  for (const r of pl.resources) { const v = (r.versions || []).find(v => v.ref === ref); if (v) return v; }
+  return { ref };
+}
+
+function feedItem(b) {
+  const c = commitOf(b);
+  const open = !!expanded[b.id];
+  const cls = b.status === 'waiting_for_approval' ? 'needme' : b.status === 'failed' ? 'failed-item' : b.status === 'started' ? 'running-item' : '';
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const j = pl.jobs.find(x => x.name === b.job.split('/')[0]);
+  let body = '';
+  if (open) {
+    const failIdx = P.firstFailStep(b);
+    body = `<div class="itembody">
+      ${b.status === 'waiting_for_approval' ? `<div class="warnbox" style="margin:10px 14px">⧖ <b>${esc(j && j.approve ? j.approve.name : 'approval')}</b> — 1/${j && j.approve ? j.approve.need : 2} approvals (maria ✓)
+        <button class="btn primary sm" data-act="approve|${b.id}">Approve</button>
+        <button class="btn danger sm" data-act="reject|${b.id}">Reject</button></div>` : ''}
+      ${b.steps.map((sp, i) => `
+        <div class="stepline"><span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
+          <span class="mut">${sp.type}</span><b>${esc(sp.name)}</b><span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+        ${(i === failIdx || sp.status === 'started') && sp.log.length ? `<div class="lg" ${sp.status === 'started' ? 'data-follow' : ''} id="lg-${b.id}-${i}" data-keep-scroll>${P.renderLog(sp.log.slice(-40))}</div>` : ''}`).join('')}
+      <div style="display:flex;gap:8px;padding:10px 14px;align-items:center">
+        ${P.buildActions(b)}
+        <span class="sp"></span><span class="mut" style="font-size:12px">worker ${esc(b.worker)}</span></div>
+    </div>`;
+  }
+  return `<div class="item ${cls}">
+    <div class="itemhead" onclick="window._tog('${b.id}')">
+      <span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}" style="font-size:16px;width:18px">${st(b.status).sym}</span>
+      <div style="flex:1;min-width:0">
+        <div><b>${esc(b.pipeline)}</b> / ${esc(b.job)} <span class="mut">#${b.n}</span>
+          ${b.status === 'waiting_for_approval' ? '<span class="badge" style="background:#8e44ad">needs you</span>' : ''}</div>
+        <div class="mut" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${c.msg ? esc(c.msg) + ' · ' : ''}<code>${esc(String(c.ref).slice(0, 7))}</code>
+          ${c.author ? '· ' + esc(c.author) : ''} · ${b.trigger.kind === 'manual' ? '▶ ' + esc(b.trigger.user) : esc(b.trigger.kind)}</div></div>
+      <div class="mut r nowrap" style="font-size:12px" data-live-times>${ago(b.start)}<br>${fmtDur(P.buildDur(b)) || ''}</div>
+      <span class="mut">${open ? '▾' : '▸'}</span>
+    </div>${body}</div>`;
+}
+
+function feed(f) {
+  let builds = DATA.builds.slice().sort((a, b) => b.start - a.start);
+  if (f === 'needs-me') builds = builds.filter(b => b.status === 'waiting_for_approval' || b.status === 'pending');
+  else if (f === 'failed') builds = builds.filter(b => ['failed', 'errored'].includes(b.status));
+  else if (f === 'running') builds = builds.filter(b => b.status === 'started');
+  else if (f && f !== 'all') builds = builds.filter(b => b.team === f);
+  builds = builds.slice(0, 40);
+  const chips = [['all', 'All'], ['needs-me', '⧖ Needs me'], ['failed', '✕ Failed'], ['running', '● Running'],
+  ...DATA.teams.map(t => [t.name, t.name])];
+  const groups = [];
+  for (const b of builds) {
+    const d = new Date(b.start); const today = new Date();
+    const label = d.toDateString() === today.toDateString() ? 'Today'
+      : d.toDateString() === new Date(today - 864e5).toDateString() ? 'Yesterday' : d.toLocaleDateString();
+    if (!groups.length || groups[groups.length - 1].label !== label) groups.push({ label, items: [] });
+    groups[groups.length - 1].items.push(b);
+  }
+  return `<div class="feed">
+    <div class="filters">${chips.map(([k, lbl]) => `<a class="chip ${(f || 'all') === k ? 'on' : ''}" href="#/f/${k}">${lbl}</a>`).join('')}</div>
+    ${groups.map(g => `<div class="dayhead">${g.label}</div>` + g.items.map(feedItem).join('')).join('')}
+    ${!builds.length ? '<div class="mut" style="text-align:center;padding:40px">nothing here ✓</div>' : ''}
+  </div>`;
+}
+
+function pipelinesPage() {
+  return `<div class="feed"><h1>Pipelines</h1>
+    ${DATA.pipelines.map(pl => {
+    const s = P.pipelineStatus(pl);
+    return `<div class="item"><div class="itemhead" onclick="location.hash='#/f/${pl.team}'">
+      <span class="st-${s} ${s === 'started' ? 'pulse' : ''}" style="font-size:16px">${st(s).sym}</span>
+      <div style="flex:1"><b>${esc(pl.team)}/${esc(pl.name)}</b> <span class="mut">${esc(pl.desc)}</span>
+        <div style="margin-top:4px">${pl.jobs.map(j => P.historyStrip(pl, j.name, 1)).join(' ')}</div></div>
+      <button class="btn sm" onclick="event.stopPropagation();P.ACT.pausePipeline('${pl.team}','${pl.name}')">${pl.paused ? '▶' : '❚❚'}</button>
+    </div></div>`;
+  }).join('')}
+  <p class="mut">A feed-first UI keeps pipeline structure secondary — this list is intentionally thin; config/graph would live one level deeper (see variations 01–03).</p></div>`;
+}
+
+window._tog = id => { expanded[id] = !expanded[id]; App.refresh(); };
+
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b] = r;
+  if (!a) m.innerHTML = feed('all');
+  else if (a === 'f') m.innerHTML = feed(b);
+  else if (a === 'pipelines') m.innerHTML = pipelinesPage();
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else if (a === 'b') { expanded[b] = true; m.innerHTML = feed('all'); }
+  else m.innerHTML = `<div class="pg">Not found</div>`;
+}
+App.start(render);
+</script>
+</body></html>

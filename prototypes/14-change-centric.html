@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>14 · Change-centric — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  header { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 14px; padding: 9px 16px; background: #fff; border-bottom: 2px solid #1f1a16; }
+  header .logo { font-weight: 700; }
+  header a { color: #4a423b; } header a.on { font-weight: 700; color: #1f1a16; }
+  .attnbadge { background: #8e44ad; color: #fff; border-radius: 10px; padding: 0 8px; font-size: 12px; }
+  .home { max-width: 980px; margin: 0 auto; padding: 16px 18px 60px; }
+  .attn { border: 1px solid #e0d3ea; background: #faf6fd; border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .attn .row { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid #efe6f5; flex-wrap: wrap; }
+  .attn .row:last-child { border-bottom: none; }
+  .notshown { color: #7a7168; font-size: 12px; margin: 0 2px 14px; }
+  .tabs { display: flex; gap: 2px; background: #efeae5; border-radius: 6px; padding: 2px; width: max-content; margin-bottom: 12px; }
+  .tabs a { padding: 3px 14px; border-radius: 5px; color: #4a423b; font-size: 13px; }
+  .tabs a.on { background: #fff; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  /* change rows */
+  .chg { background: #fff; border: 1px solid #e4ddd6; border-radius: 8px; margin-bottom: 8px; }
+  .chg .h { display: flex; gap: 10px; align-items: center; padding: 10px 14px; }
+  .chg .h:hover { background: #fbf6f1; }
+  .chg.mine { border-left: 4px solid #1f6feb; }
+  .jobdots { display: inline-flex; gap: 4px; align-items: center; }
+  .jobdot { width: 14px; height: 14px; border-radius: 3px; display: inline-block; text-align: center; font-size: 10px; line-height: 14px; color: #fff; }
+  .old { padding: 4px 14px 10px 42px; font-size: 12px; color: #7a7168; }
+  /* PR page */
+  .toolbar { display: flex; gap: 10px; align-items: center; padding: 9px 16px; border-bottom: 1px solid #e4ddd6; background: #fff; position: sticky; top: 42px; z-index: 5; flex-wrap: wrap; }
+  .ctxbanner { background: #eef3f8; border-bottom: 1px solid #d7e3ef; padding: 6px 16px; font-size: 13px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .commitchip { border: 1px solid #d5cdc5; border-radius: 12px; padding: 1px 10px; font-size: 12px; color: #4a423b; background: #fff; }
+  .commitchip.on { background: #1f1a16; color: #fff; border-color: #1f1a16; }
+  .commitchip.sup { text-decoration: line-through; opacity: .65; }
+  svg text { font: 12px -apple-system, sans-serif; pointer-events: none; }
+  .gnode { cursor: pointer; } .gnode:hover rect { stroke: #1f1a16; stroke-width: 2; }
+  .errsec { margin: 12px 16px; border: 1px solid #f2bccb; background: #fdeef2; border-radius: 8px; overflow: hidden; }
+  .errsec .h { padding: 8px 12px; color: #b3003a; font-weight: 700; }
+  .step { border: 1px solid #e4ddd6; border-radius: 6px; margin: 0 16px 8px; background: #fff; overflow: hidden; }
+  .stephead { display: flex; gap: 10px; align-items: center; padding: 7px 12px; cursor: pointer; }
+  .stephead:hover { background: #f8f4f0; }
+  .wfrow { display: flex; align-items: center; height: 26px; }
+  .wfrow .lbl { width: 190px; flex: none; display: flex; gap: 7px; align-items: center; font-size: 13px; }
+  .wfrow .lane { flex: 1; position: relative; height: 100%; border-left: 1px solid #eee7e0; }
+  .wfbar { position: absolute; top: 5px; height: 15px; border-radius: 3px; cursor: pointer; min-width: 6px; }
+  .wfbar:hover { outline: 2px solid #1f1a16; }
+  footer { padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<div id="main"></div>
+<footer><b>Variation 14 · Change-centric</b> — the change (PR/commit) is a first-class axis: ownership-scoped inbox, per-ref graph coloring, superseded commits demoted, fork CI approval · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/data-pr.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+const ME = 'egon';
+const prPipe = () => P.getPipeline('main', 'pikoci-pr');
+let showOld = {};
+
+// ---------- change-context queries ----------
+function buildsForRef(ref) {
+  return DATA.builds.filter(b => b.pipeline === 'pikoci-pr' && b.versions['git.pikoci-pr'] === ref);
+}
+function jobBuildsForRef(job, ref) {
+  return buildsForRef(ref).filter(b => b.job === job || b.job.startsWith(job + '/'));
+}
+function jobStatusForRef(job, ref) {
+  const bs = jobBuildsForRef(job, ref);
+  if (!bs.length) return 'none';
+  return bs.map(b => b.status).sort((a, b) => P.RANK[a] - P.RANK[b])[0];
+}
+function refStatus(ref) {
+  const sts = prPipe().jobs.map(j => jobStatusForRef(j.name, ref)).filter(s => s !== 'none');
+  if (!sts.length) return 'none';
+  return sts.sort((a, b) => P.RANK[a] - P.RANK[b])[0];
+}
+function prLatest(pr) { return pr.commits.find(c => !c.superseded) || pr.commits[0]; }
+function prStatus(pr) {
+  if (pr.ciApproval === 'required') return 'waiting_for_approval';
+  return refStatus(prLatest(pr).ref);
+}
+function jobDots(ref, job) {
+  const jobs = prPipe().jobs;
+  return `<span class="jobdots">${jobs.map(j => {
+    const s = job === undefined ? jobStatusForRef(j.name, ref) : job;
+    const bs = jobBuildsForRef(j.name, ref);
+    const link = bs[0] ? `#/b/${bs[0].id}` : 'javascript:void(0)';
+    return `<a class="jobdot ${s === 'started' ? 'pulse' : ''}" title="${esc(j.name)}: ${st(s).label}" href="${link}"
+      style="background:${s === 'none' ? '#e8e2dc' : st(s).color};color:${s === 'none' ? '#b1a89f' : '#fff'}">${s === 'none' ? '·' : st(s).sym}</a>`;
+  }).join('')}</span>`;
+}
+
+// trunk changes (from the trunk pipeline, keyed by commit)
+function trunkChanges() {
+  const pl = P.getPipeline('main', 'pikoci');
+  const out = [];
+  for (const v of pl.resources.find(r => r.name === 'git.pikoci').versions) {
+    const builds = DATA.builds.filter(b => b.pipeline === 'pikoci' && b.versions['git.pikoci'] === v.ref);
+    if (builds.length) out.push({ v, builds, pl });
+  }
+  return out;
+}
+
+// ---------- scoped attention ----------
+function attnItems() {
+  const items = [];
+  // 1. MY failing PR jobs
+  for (const pr of DATA.prs.filter(p => p.author === ME)) {
+    const ref = prLatest(pr).ref;
+    for (const j of prPipe().jobs) {
+      const s = jobStatusForRef(j.name, ref);
+      if (s === 'failed' || s === 'errored') {
+        const b = jobBuildsForRef(j.name, ref).find(x => ['failed', 'errored'].includes(x.status));
+        items.push({ pri: 0, icon: '✕', cls: 'st-failed', text: `Your PR #${pr.n}: ${j.name} failing on ${ref}`, sub: firstErr(b), act: `<a class="btn sm" href="#/b/${b.id}">Log</a> <button class="btn sm" data-act="retry|${b.id}">↻ Retry</button>` });
+      }
+    }
+  }
+  // 2. fork PRs awaiting CI approval (maintainer duty)
+  for (const pr of DATA.prs.filter(p => p.ciApproval === 'required'))
+    items.push({
+      pri: 0, icon: '⧖', cls: 'st-waiting_for_approval',
+      text: `PR #${pr.n} by ${pr.author} (first-time contributor, fork) — CI has not run`,
+      sub: 'Fork PRs never receive secrets automatically. Approving runs the checks.',
+      act: `<button class="btn primary sm" onclick="window._okci(${pr.n},false)">▶ Run CI (no secrets)</button>
+            <button class="btn sm" onclick="window._okci(${pr.n},true)">Run with secrets</button>
+            <a class="btn sm" href="#/pr/${pr.n}">View PR</a>`,
+    });
+  // 3. trunk problems (everyone's problem)
+  for (const b of DATA.builds.filter(b => b.status === 'waiting_for_approval' && b.pipeline !== 'pikoci-pr'))
+    items.push({ pri: 1, icon: '⧖', cls: 'st-waiting_for_approval', text: `Trunk: ${b.pipeline} / ${b.job} #${b.n} waiting for your approval (1/2)`, act: `<button class="btn primary sm" data-act="approve|${b.id}">Approve</button> <button class="btn danger sm" data-act="reject|${b.id}">Reject</button>` });
+  for (const pl of DATA.pipelines.filter(p => p.name !== 'pikoci-pr')) {
+    for (const j of pl.jobs) {
+      const s = P.jobStatus(pl, j.name);
+      if (s === 'failed' || s === 'errored') {
+        const b = P.latestBuild(pl, j.name);
+        items.push({ pri: 1, icon: '✕', cls: 'st-failed', text: `Trunk: ${pl.name} / ${j.name} failing since ${ago(b.start)}`, act: `<a class="btn sm" href="#/b/${b.id}">Log</a> <button class="btn sm" data-act="retry|${b.id}">↻ Retry</button>` });
+      }
+    }
+  }
+  // 4. queue starvation (only when it affects an open PR)
+  for (const b of DATA.builds.filter(b => b.pipeline === 'pikoci-pr' && b.status === 'pending' && b.queue))
+    items.push({ pri: 2, icon: '⏳', cls: 'st-pending', text: `PR #476: ${b.job} queued ${ago(b.start)} (position ${b.queue.pos}) — ${b.queue.reason}`, act: `<a class="btn sm" href="#/workers">Workers</a>` });
+  return items.sort((a, b) => a.pri - b.pri);
+}
+function firstErr(b) {
+  for (const s of b.steps) for (const l of s.log) if (/FAIL:|ERROR/.test(l)) return l.trim();
+  return '';
+}
+function notShown() {
+  const others = DATA.prs.filter(pr => pr.author !== ME && !pr.ciApproval && ['failed', 'errored'].includes(prStatus(pr)));
+  return others;
+}
+
+function header(route) {
+  const sec = route[0] || '';
+  const n = attnItems().length;
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', 'Changes', ['', 'tab', 'pr', 'b'].includes(sec))}
+    ${l('pipeline/mixed', 'Pipeline', sec === 'pipeline')}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Workers', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')}
+    ${n ? `<a href="#/" class="attnbadge">${n}</a>` : ''}
+    <span class="sp"></span>${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+
+// ---------- home ----------
+function prRow(pr) {
+  const c = prLatest(pr);
+  const s = prStatus(pr);
+  const mine = pr.author === ME;
+  const old = pr.commits.filter(x => x.superseded);
+  return `<div class="chg ${mine ? 'mine' : ''}">
+    <div class="h" onclick="location.hash='#/pr/${pr.n}'" style="cursor:pointer">
+      <span class="st-${s} ${s === 'started' ? 'pulse' : ''}" style="font-size:16px;width:18px">${st(s).sym}</span>
+      <div style="flex:1;min-width:0">
+        <div><b>#${pr.n}</b> ${esc(pr.title)}
+          ${pr.draft ? '<span class="chip">draft</span>' : ''}
+          ${pr.fork ? '<span class="chip">fork</span>' : ''}
+          ${pr.ciApproval ? '<span class="badge" style="background:#8e44ad">CI awaits approval</span>' : ''}
+          ${mine ? '<span class="chip" style="border-color:#1f6feb;color:#1f6feb">yours</span>' : ''}</div>
+        <div class="mut" style="font-size:12px">${esc(pr.author)} · <code>${esc(pr.branch)}</code> · <code>${esc(c.ref)}</code> · updated ${ago(pr.updated)}</div></div>
+      ${pr.ciApproval ? '<span class="mut" style="font-size:12px">no checks run</span>' : jobDots(c.ref)}
+    </div>
+    ${old.length ? `<div class="old">
+      <a href="javascript:void(0)" onclick="window._old(${pr.n})">${showOld[pr.n] ? '▾' : '▸'} ${old.length} superseded commit${old.length > 1 ? 's' : ''}</a>
+      ${showOld[pr.n] ? old.map(o => `<div style="padding:4px 0 0 14px"><code>${esc(o.ref)}</code> ${esc(o.msg)}
+        <span class="mut">· builds auto-cancelled on push</span> ${jobDots(o.ref)}</div>`).join('') : ''}</div>` : ''}
+  </div>`;
+}
+function trunkRow(ch) {
+  const worst = ch.builds.map(b => b.status).sort((a, b) => P.RANK[a] - P.RANK[b])[0];
+  return `<div class="chg"><div class="h">
+    <span class="st-${worst}" style="font-size:16px;width:18px">${st(worst).sym}</span>
+    <div style="flex:1;min-width:0">
+      <div><code>${esc(ch.v.ref)}</code> <b>${esc(ch.v.msg || '')}</b></div>
+      <div class="mut" style="font-size:12px">${esc(ch.v.author || '')} · trunk (master) · ${ago(ch.v.at)}</div></div>
+    <span class="jobdots">${ch.builds.map(b => `<a class="jobdot ${b.status === 'started' ? 'pulse' : ''}" href="#/b/${b.id}"
+      title="${esc(b.job)}: ${st(b.status).label}" style="background:${st(b.status).color}">${st(b.status).sym}</a>`).join('')}</span>
+  </div></div>`;
+}
+function home(tab) {
+  tab = tab || 'open';
+  const items = attnItems();
+  const hidden = notShown();
+  let rows = '';
+  if (tab === 'mine') {
+    const mine = DATA.prs.filter(p => p.author === ME);
+    rows = mine.map(prRow).join('') || '<div class="mut" style="padding:30px;text-align:center">You have no open PRs.</div>';
+  } else if (tab === 'trunk') {
+    rows = trunkChanges().map(trunkRow).join('');
+  } else {
+    rows = DATA.prs.slice().sort((a, b) => b.updated - a.updated).map(prRow).join('');
+  }
+  const T = (k, lbl) => `<a class="${tab === k ? 'on' : ''}" href="#/tab/${k}">${lbl}</a>`;
+  return `<div class="home">
+    ${items.length ? `<div class="attn">${items.map(t => `
+      <div class="row"><span class="${t.cls}" style="width:18px;font-size:15px">${t.icon}</span>
+        <div style="flex:1;min-width:200px">${esc(t.text)}
+          ${t.sub ? `<div class="mut" style="font-size:12px">${esc(t.sub)}</div>` : ''}</div>${t.act}</div>`).join('')}</div>` : ''}
+    ${hidden.length ? `<div class="notshown">▸ ${hidden.length} failing PR not shown here: ${hidden.map(p => `<a href="#/pr/${p.n}">#${p.n}</a> (${esc(p.author)}${p.draft ? ', draft' : ''})`).join(', ')} — their failure, their inbox.</div>` : ''}
+    <div class="tabs">${T('mine', 'Mine')}${T('open', 'All open PRs')}${T('trunk', 'Trunk')}</div>
+    ${rows}
+    ${tab !== 'trunk' ? `<div class="mut" style="font-size:12px;margin-top:14px">Roll-ups here are per-change, never per-pipeline: a red row is one PR's problem, and trunk health lives in its own tab.</div>` : ''}
+  </div>`;
+}
+
+// ---------- PR page: per-ref graph + jobs + waterfall ----------
+function graphForRef(ref, ctxLabel) {
+  const pl = prPipe();
+  const g = P.layoutGraph(pl, { nodeW: 150, nodeH: 40, resW: 128, resH: 30, gapX: 90, gapY: 22, pad: 24 });
+  let svg = `<svg width="${g.w}" height="${g.h}">`;
+  for (const e of g.edges) {
+    const a = g.nodes[e.from], b = g.nodes[e.to];
+    if (!a || !b) continue;
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
+    svg += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${e.passed ? '#8a8178' : '#d5cdc5'}" stroke-width="${e.passed ? 2 : 1.5}"/>`;
+  }
+  for (const [nm, n] of Object.entries(g.nodes)) {
+    if (n.kind === 'resource') {
+      svg += `<g><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="14" fill="#fff" stroke="#b9b2ab" stroke-width="1.5"/>
+        <text x="${n.x + 12}" y="${n.y + n.h / 2 + 4}" fill="#4a423b">${esc(nm)}</text></g>`;
+    } else {
+      const s = ref === '__mixed__' ? P.jobStatus(pl, nm) : jobStatusForRef(nm, ref);
+      const bs = ref === '__mixed__' ? [P.latestBuild(pl, nm)].filter(Boolean) : jobBuildsForRef(nm, ref);
+      const j = pl.jobs.find(j => j.name === nm);
+      const sub = s === 'none' ? 'not run' : (bs[0] ? '#' + bs[0].n + (bs[0].end ? ' · ' + fmtDur((bs[0].end - bs[0].start) / 1000) : '') : '');
+      const mixedRef = ref === '__mixed__' && bs[0] ? bs[0].versions['git.pikoci-pr'] : null;
+      svg += `<g class="gnode ${s === 'started' ? 'pulse' : ''}" ${bs[0] ? `onclick="location.hash='#/b/${bs[0].id}'"` : ''}>
+        <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="4" fill="${s === 'none' ? '#d9d2ca' : st(s).color}"/>
+        <text x="${n.x + 10}" y="${n.y + 17}" fill="#fff" font-weight="600">${esc(nm)}${j.matrix ? ' ×' + j.matrix.length : ''}</text>
+        <text x="${n.x + 10}" y="${n.y + 32}" fill="rgba(255,255,255,.9)">${mixedRef ? '@' + esc(mixedRef) : esc(sub)}</text></g>`;
+    }
+  }
+  return svg + '</svg>';
+}
+function refWaterfall(ref) {
+  const bs = buildsForRef(ref).slice().sort((a, b) => a.start - b.start);
+  if (!bs.length) return '';
+  const t0 = Math.min(...bs.map(b => b.start));
+  const t1 = Math.max(...bs.map(b => b.end || Date.now()));
+  const span = Math.max(t1 - t0, 1000);
+  return `<h2>Timing</h2>${bs.map(b => {
+    const l = (b.start - t0) / span * 100, w = Math.max(((b.end || Date.now()) - b.start) / span * 100, .8);
+    return `<div class="wfrow">
+      <div class="lbl"><span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.job)}</span></div>
+      <div class="lane"><div class="wfbar ${b.status === 'started' ? 'pulse' : ''}" onclick="location.hash='#/b/${b.id}'"
+        style="left:${l}%;width:${w}%;background:${st(b.status).color}"></div></div>
+      <span class="mut" style="width:64px;text-align:right;font-size:12px">${b.end ? fmtDur((b.end - b.start) / 1000) : (b.status === 'pending' ? 'queued' : '…')}</span></div>`;
+  }).join('')}`;
+}
+function prPage(n, selRef) {
+  const pr = DATA.prs.find(p => p.n === +n);
+  if (!pr) return '<div class="pg">PR not found</div>';
+  const c = pr.commits.find(x => x.ref === selRef) || prLatest(pr);
+  const s = prStatus(pr);
+  return `<div class="toolbar">
+      <a href="#/">changes</a> / <b>#${pr.n} ${esc(pr.title)}</b>
+      <span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym} ${st(s).label}</span>
+      ${pr.draft ? '<span class="chip">draft</span>' : ''}${pr.fork ? '<span class="chip">fork</span>' : ''}
+      <span class="mut" style="font-size:12px">${esc(pr.author)} · <code>${esc(pr.branch)}</code></span></div>
+    <div class="ctxbanner">viewing checks for
+      ${pr.commits.map(x => `<a class="commitchip ${x.ref === c.ref ? 'on' : ''} ${x.superseded ? 'sup' : ''}"
+        href="#/pr/${pr.n}/${x.ref}" title="${esc(x.msg)}">${esc(x.ref)}${x.superseded ? ' (superseded)' : ''}</a>`).join('')}
+      <span class="mut">— every view below is scoped to this one commit</span></div>
+    ${pr.ciApproval ? `<div class="warnbox" style="margin:14px 16px">⧖ <b>CI has not run for this fork PR.</b>
+        First-time contributors need a maintainer to start checks; secrets are withheld unless explicitly granted.
+        <div style="margin-top:6px"><button class="btn primary sm" onclick="window._okci(${pr.n},false)">▶ Run CI (no secrets)</button>
+        <button class="btn sm" onclick="window._okci(${pr.n},true)">Run with secrets</button></div></div>`
+      : `<div style="padding:16px;overflow:auto">${graphForRef(c.ref)}</div>
+        <div class="pg" style="padding-top:0">
+        ${jobStatusForRef('test-integration', c.ref) === 'none' && jobStatusForRef('test-unit', c.ref) === 'failed'
+        ? `<div class="notshown">test-integration not created — upstream <b>test-unit</b> failed for this commit (a gap, not a green).</div>` : ''}
+        ${refWaterfall(c.ref)}</div>`}`;
+}
+
+// ---------- pipeline page with context selector (didactic) ----------
+function pipelinePage(ctx) {
+  ctx = ctx || 'mixed';
+  const chips = [['mixed', 'latest per job (mixed!)'], ...DATA.prs.filter(p => !p.ciApproval).map(p => ['' + p.n, '#' + p.n + ' ' + p.author])];
+  const ref = ctx === 'mixed' ? '__mixed__' : (DATA.prs.find(p => p.n === +ctx) ? prLatest(DATA.prs.find(p => p.n === +ctx)).ref : '__mixed__');
+  return `<div class="toolbar"><b>main/pikoci-pr</b><span class="mut">the PR pipeline, as a pipeline page</span></div>
+    <div class="ctxbanner">context:
+      ${chips.map(([k, lbl]) => `<a class="commitchip ${ctx === k ? 'on' : ''}" href="#/pipeline/${k}">${esc(lbl)}</a>`).join('')}</div>
+    ${ctx === 'mixed' ? `<div class="errbox" style="margin:14px 16px">This is the failure mode: each job shows its <b>latest build from whichever PR ran last</b> —
+      the @refs below don't match, so this graph describes code that never existed. Pick a context chip above and it becomes truthful.</div>` : ''}
+    <div style="padding:16px;overflow:auto">${graphForRef(ref)}</div>`;
+}
+
+// ---------- build page (error-first, from variation 13) ----------
+function buildPage(id) {
+  const b = P.getBuild(id);
+  if (!b) return '<div class="pg">not found</div>';
+  const ref = b.versions['git.pikoci-pr'];
+  const pr = ref ? DATA.prs.find(p => p.commits.some(c => c.ref === ref)) : null;
+  const failIdx = P.firstFailStep(b);
+  const errTail = failIdx >= 0 ? b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error/.test(l)).slice(0, 4) : [];
+  return `<div class="toolbar">
+      ${pr ? `<a href="#/pr/${pr.n}/${ref}">PR #${pr.n}</a> /` : `<a href="#/tab/trunk">trunk</a> /`}
+      <b class="st-${b.status}">${st(b.status).sym} ${esc(b.job)} #${b.n}</b>
+      ${P.buildMeta(b)}<span class="sp"></span>${P.buildActions(b)}</div>
+    ${pr ? `<div class="ctxbanner">this build belongs to <b>#${pr.n} ${esc(pr.title)}</b> @ <code>${esc(ref)}</code>
+      ${pr.commits.find(c => c.ref === ref && c.superseded) ? ' — <b>superseded</b>: a newer commit exists, results are stale' : ''}</div>` : ''}
+    ${b.status === 'pending' && b.queue ? `<div class="warnbox" style="margin:12px 16px">⏳ queued, position ${b.queue.pos} — ${esc(b.queue.reason)}</div>` : ''}
+    ${failIdx >= 0 ? `<div class="errsec"><div class="h">✕ first failure: ${esc(b.steps[failIdx].name)}
+        <a style="font-weight:400;font-size:13px" href="javascript:void(0)" onclick="document.getElementById('st-${failIdx}').scrollIntoView({behavior:'smooth'})">jump ↓</a></div>
+      <pre class="log" style="padding:4px 0">${errTail.map(l => `<span class="ln"><span class="lno">·</span><span class="l-err">${esc(l)}</span></span>`).join('\n')}</pre></div>` : ''}
+    <div style="padding:12px 0" ${b.status === 'started' ? 'data-follow' : ''}>
+    ${b.steps.map((sp, i) => `<div class="step" id="st-${i}">
+      <div class="stephead" onclick="const l=this.nextElementSibling;l.style.display=l.style.display==='none'?'':'none'">
+        <span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}" style="width:14px">${st(sp.status).sym}</span>
+        <span class="mut" style="width:46px;font-size:11px;text-transform:uppercase">${sp.type}</span><b>${esc(sp.name)}</b>
+        <span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+      <div style="display:${sp.status === 'failed' || sp.status === 'started' ? '' : 'none'}">${sp.log.length ? P.renderLog(sp.log, { id: 'l' + i }) : '<div class="pad mut">no output</div>'}</div>
+    </div>`).join('')}</div>`;
+}
+
+// ---------- actions ----------
+window._old = n => { showOld[n] = !showOld[n]; App.refresh(); };
+window._okci = (n, secrets) => {
+  const pr = DATA.prs.find(p => p.n === +n);
+  pr.ciApproval = null;
+  const ref = prLatest(pr).ref;
+  const mk = (job, dur) => {
+    const b = { id: 'pr' + Math.floor(Math.random() * 1e9), team: 'main', pipeline: 'pikoci-pr', job, n: 300 + Math.floor(Math.random() * 50), status: 'started', start: Date.now(), end: null, worker: 'helsinki-2', versions: { 'git.pikoci-pr': ref }, trigger: { kind: 'manual', user: ME }, steps: [{ name: job, type: 'task', status: 'started', dur: 0, log: ['$ (checks running' + (secrets ? ', secrets granted' : ', no secrets') + ')'] }] };
+    DATA.builds.push(b);
+    setTimeout(() => { b.status = 'succeeded'; b.end = Date.now(); b.steps[0].status = 'succeeded'; b.steps[0].dur = (b.end - b.start) / 1000; b.steps[0].log.push('done: OK'); App.refresh(); }, dur);
+  };
+  mk('lint', 7000); mk('test-unit', 12000);
+  P.toast(`CI approved for PR #${n} (${secrets ? 'with secrets' : 'no secrets'})`);
+  App.refresh();
+};
+
+// ---------- router ----------
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b, c] = r;
+  if (!a) m.innerHTML = home('open');
+  else if (a === 'tab') m.innerHTML = home(b);
+  else if (a === 'pr') m.innerHTML = prPage(b, c);
+  else if (a === 'pipeline') m.innerHTML = pipelinePage(b);
+  else if (a === 'b') m.innerHTML = buildPage(b);
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else m.innerHTML = '<div class="pg">Not found</div>';
+}
+App.start(render);
+</script>
+</body></html>

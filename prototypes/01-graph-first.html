@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>01 · Graph-first — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 8px 16px;
+    background: #1f1a16; color: #fff; flex: none; }
+  header a { color: #cfc7bf; } header a.on { color: #fff; font-weight: 600; }
+  header .logo { font-weight: 700; color: #29ADFF; }
+  .wrap { display: flex; flex: 1; min-height: 0; }
+  nav.side { width: 210px; flex: none; overflow: auto; background: #f2ede8; border-right: 1px solid #e4ddd6; padding: 10px 0; }
+  nav.side .tm { padding: 8px 14px 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #7a7168; }
+  nav.side a.pl { display: flex; align-items: center; gap: 8px; padding: 5px 14px; color: #1f1a16; }
+  nav.side a.pl.on { background: #fff; font-weight: 600; }
+  main { flex: 1; overflow: auto; min-width: 0; }
+  .graphbar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-bottom: 1px solid #e4ddd6; background: #fff; position: sticky; top: 0; z-index: 5;}
+  .graphwrap { padding: 20px; overflow: auto; }
+  svg text { font: 12px -apple-system, sans-serif; pointer-events: none; }
+  .gnode { cursor: pointer; }
+  .gnode:hover rect { stroke: #1f1a16; stroke-width: 2; }
+  /* dashboard wall */
+  .wall { padding: 18px 22px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .plcard { border: 1px solid #e4ddd6; border-top: 4px solid #ccc; border-radius: 6px; background: #fff; padding: 10px 12px; display:block; color:inherit;}
+  .plcard:hover { text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .attn { font-size: 12px; margin-top: 6px; }
+  /* build page */
+  .btabs { display: flex; gap: 4px; padding: 10px 14px 0; overflow-x: auto; background:#fff; border-bottom:1px solid #e4ddd6;}
+  .btab { padding: 4px 10px 6px; border-radius: 5px 5px 0 0; border-bottom: 3px solid transparent; color: #4a423b; }
+  .btab.on { background: #f2ede8; font-weight: 700; }
+  .step { border: 1px solid #e4ddd6; border-radius: 6px; margin-bottom: 8px; background: #fff; overflow: hidden; }
+  .stephead { display: flex; gap: 10px; align-items: center; padding: 7px 12px; cursor: pointer; }
+  .stephead:hover { background: #f8f4f0; }
+  .stype { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #7a7168; width: 46px; }
+  footer { flex: none; padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color:#7a7168;}
+</style>
+</head><body>
+<div id="hdr"></div>
+<div class="wrap"><nav class="side" id="side" data-keep-scroll></nav><main id="main" data-keep-scroll></main></div>
+<footer><b>Variation 01 · Graph-first</b> (Concourse-inspired: the DAG is the pipeline page; graph nodes are the navigation) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages, ACT } = P;
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header>
+    <span class="logo">▞ PikoCI</span>
+    ${l('', 'Pipelines', sec === '' || sec === 'p' || sec === 'b')}
+    ${l('teams', 'Teams', sec === 'teams')} ${l('workers', 'Workers', sec === 'workers')}
+    ${l('audit', 'Audit', sec === 'audit')} <span class="sp"></span>
+    ${l('settings', 'egon ⚙', sec === 'settings')}
+  </header>`;
+}
+function sidebar(route) {
+  const cur = route[0] === 'p' ? route[1] + '/' + route[2] : (route[0] === 'b' ? (P.getBuild(route[1]) || {}).team + '/' + (P.getBuild(route[1]) || {}).pipeline : '');
+  let h = `<a class="pl" href="#/" style="font-weight:600">⌂ Dashboard</a>`;
+  for (const t of DATA.teams) {
+    h += `<div class="tm">${esc(t.name)}</div>`;
+    for (const pl of P.teamPipelines(t.name)) {
+      const s = P.pipelineStatus(pl);
+      h += `<a class="pl ${cur === pl.team + '/' + pl.name ? 'on' : ''}" href="#/p/${pl.team}/${pl.name}">
+        <span class="dot ${s === 'started' ? 'pulse' : ''}" style="background:${st(s).color}"></span>${esc(pl.name)}
+        ${pl.public ? '<span class="mut" title="public">🌐</span>' : ''}</a>`;
+    }
+  }
+  document.getElementById('side').innerHTML = h;
+}
+
+// ---------- dashboard: wall of mini-graph cards ----------
+function dashboard() {
+  let h = `<div class="wall"><h1>All pipelines</h1>`;
+  for (const t of DATA.teams) {
+    h += `<h2>${esc(t.name)}</h2><div class="cards">`;
+    for (const pl of P.teamPipelines(t.name)) {
+      const s = P.pipelineStatus(pl);
+      const attn = P.pipelineAttention(pl);
+      h += `<a class="plcard" href="#/p/${pl.team}/${pl.name}" style="border-top-color:${st(s).color}">
+        <div style="display:flex;align-items:center;gap:8px"><b>${esc(pl.name)}</b>
+          <span class="sp"></span><span class="st-${s} ${s === 'started' ? 'pulse' : ''}">${st(s).sym} ${st(s).label}</span></div>
+        <div style="margin:8px 0">${P.miniGraphSVG(pl, 216, 54)}</div>
+        <div class="mut" style="font-size:12px">${esc(pl.desc)}</div>
+        ${attn.length ? `<div class="attn">${attn.map(a =>
+          a.kind === 'approval' ? `<span class="st-waiting_for_approval">⧖ ${esc(a.job)} needs approval</span>` :
+          a.kind === 'check-error' ? `<span class="st-errored">! ${esc(a.res)} check failing</span>` :
+          `<span class="st-failed">✕ ${esc(a.job)}</span>`).join('<br>')}</div>` : ''}
+      </a>`;
+    }
+    h += `</div>`;
+  }
+  return h + `</div>`;
+}
+
+// ---------- pipeline page: the graph ----------
+function pipelinePage(team, name) {
+  const pl = P.getPipeline(team, name);
+  if (!pl) return `<div class="pg">Unknown pipeline</div>`;
+  const g = P.layoutGraph(pl, { nodeW: 150, nodeH: 40, resW: 128, resH: 30, gapX: 90, gapY: 22, pad: 24 });
+  let svg = `<svg width="${g.w}" height="${g.h}" data-live-times>`;
+  for (const e of g.edges) {
+    const a = g.nodes[e.from], b = g.nodes[e.to];
+    if (!a || !b) continue;
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
+    svg += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none"
+      stroke="${e.passed ? '#8a8178' : '#d5cdc5'}" stroke-width="${e.passed ? 2 : 1.5}" ${e.trigger === false ? 'stroke-dasharray="4 4"' : ''}/>`;
+  }
+  for (const [nm, n] of Object.entries(g.nodes)) {
+    if (n.kind === 'resource') {
+      const r = pl.resources.find(r => r.name === nm);
+      const border = r.checkError ? '#FA8072' : (r.pinned ? '#FFA300' : '#b9b2ab');
+      svg += `<g class="gnode" onclick="location.hash='#/p/${team}/${name}/r/${nm}'">
+        <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="14" fill="#fff" stroke="${border}" stroke-width="${r.pinned || r.checkError ? 3 : 1.5}"/>
+        <text x="${n.x + 12}" y="${n.y + n.h / 2 + 4}" fill="#4a423b">${r.pinned ? '📌 ' : ''}${r.checkError ? '⚠ ' : ''}${esc(nm)}</text></g>`;
+    } else {
+      const s = P.jobStatus(pl, nm);
+      const j = pl.jobs.find(j => j.name === nm);
+      const b = P.latestBuild(pl, nm);
+      svg += `<g class="gnode ${s === 'started' ? 'pulse' : ''}" onclick="location.hash='#/p/${team}/${name}/j/${nm}'">
+        <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="4" fill="${st(s).color}"/>
+        <text x="${n.x + 10}" y="${n.y + 17}" fill="#fff" font-weight="600">${esc(nm)}${j.matrix ? ' ×' + j.matrix.length : ''}</text>
+        <text x="${n.x + 10}" y="${n.y + 32}" fill="rgba(255,255,255,.85)">${j.approve ? '⧖ gate · ' : ''}${b ? '#' + b.n + ' · ' + fmtDur(P.buildDur(b)) : 'no builds'}</text></g>`;
+    }
+  }
+  svg += `</svg>`;
+  const s = P.pipelineStatus(pl);
+  return `<div class="graphbar">
+      <b style="font-size:16px">${esc(team)} / ${esc(name)}</b>
+      <span class="st-${s}">${st(s).sym} ${st(s).label}</span>
+      ${pl.public ? '<span class="chip">public</span>' : ''}
+      <span class="sp"></span>
+      <button class="btn" data-act="pausePipeline|${team}|${name}">${pl.paused ? '▶ Unpause' : '❚❚ Pause'}</button>
+      <a class="btn" href="#/p/${team}/${name}/config">Config</a>
+      <a class="btn" href="#/p/${team}/${name}/badge">Badge</a>
+    </div>
+    <div class="graphwrap">${svg}
+    <div class="mut" style="margin-top:14px;font-size:12px">Legend: rounded = resource (📌 pinned, ⚠ check failing) · box = job (click for builds) · dashed = non-triggering input</div></div>`;
+}
+
+// ---------- job page: build tabs + steps ----------
+function stepsView(b) {
+  return b.steps.map((sp, i) => {
+    const open = sp.status === 'failed' || sp.status === 'started' || (b.status === 'succeeded' && sp.type === 'task' && b.steps.every(x => x.status === 'succeeded') && false);
+    return `<div class="step">
+      <div class="stephead" onclick="const l=this.nextElementSibling; l.style.display=l.style.display==='none'?'':'none'">
+        <span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}" style="width:14px">${st(sp.status).sym}</span>
+        <span class="stype">${sp.type}</span><b>${esc(sp.name)}</b>
+        <span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span>
+      </div>
+      <div style="display:${open ? '' : 'none'}">${sp.log.length ? P.renderLog(sp.log, { id: 'st' + i }) : '<div class="pad mut">no output</div>'}</div>
+    </div>`;
+  }).join('');
+}
+function jobPage(team, name, job, buildId) {
+  const pl = P.getPipeline(team, name);
+  const j = pl.jobs.find(x => x.name === job);
+  const builds = P.jobBuilds(pl, job);
+  const b = buildId ? P.getBuild(buildId) : builds[0];
+  let h = `<div class="graphbar">
+    <a href="#/p/${team}/${name}">${esc(team)} / ${esc(name)}</a> <b>/ ${esc(job)}</b>
+    ${j.paused ? '<span class="st-paused">❚❚ paused</span>' : ''}
+    <span class="sp"></span>
+    <button class="btn primary" data-act="trigger|${team}|${name}|${job}">▶ Trigger</button>
+    <button class="btn" data-act="pauseJob|${team}|${name}|${job}">${j.paused ? 'Unpause' : 'Pause'} job</button>
+  </div>
+  <div class="btabs">${builds.slice(0, 14).map(x => `
+    <a class="btab ${b && x.id === b.id ? 'on' : ''}" style="border-bottom-color:${st(x.status).color}"
+       href="#/p/${team}/${name}/j/${job}/${x.id}">#${x.n}${x.job.includes('/') ? '·' + x.job.split('/')[1] : ''}</a>`).join('')}</div>`;
+  if (!b) return h + `<div class="pg mut">No builds yet — trigger one.</div>`;
+  h += `<div class="pg" style="max-width:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <b style="font-size:16px" class="st-${b.status}">${st(b.status).sym} Build #${b.n}${b.job.includes('/') ? ' (' + b.job.split('/')[1] + ')' : ''}</b>
+      ${P.buildMeta(b)} <span class="sp"></span>${P.buildActions(b)}
+    </div>
+    ${b.status === 'waiting_for_approval' ? `<div class="warnbox">⧖ <b>${esc(j.approve ? j.approve.name : 'approval')}</b> — 1 of ${j.approve ? j.approve.need : 2} approvals given (maria). Maintainer role required.</div>` : ''}
+    ${stepsView(b)}</div>`;
+  return h;
+}
+
+// ---------- resource page ----------
+function resourcePage(team, name, res) {
+  const pl = P.getPipeline(team, name);
+  const r = pl.resources.find(x => x.name === res);
+  return `<div class="graphbar"><a href="#/p/${team}/${name}">${esc(team)} / ${esc(name)}</a> <b>/ ${esc(res)}</b>
+      <span class="chip">${esc(r.type)}</span><span class="sp"></span>
+      <button class="btn" data-act="check|${team}|${name}|${res}">↻ Check now</button></div>
+    <div class="pg">
+    ${r.checkError ? `<div class="errbox">⚠ last check failed ${ago(r.lastCheck)}: <code>${esc(r.checkError)}</code></div>`
+      : `<div class="okbox">✓ checked ${ago(r.lastCheck)} · interval <code>${esc(r.checkEvery)}</code></div>`}
+    <h2>Versions ${r.pinned ? `<span class="st-started">📌 pinned to ${esc(r.pinned)}</span>` : ''}</h2>
+    <table class="tbl"><thead><tr><th></th><th>Version</th><th>Info</th><th>When</th><th></th></tr></thead><tbody>
+    ${r.versions.map(v => `<tr>
+      <td>${r.pinned === v.ref ? '📌' : ''}</td>
+      <td><code>${esc(v.ref)}</code></td>
+      <td>${v.msg ? esc(v.msg) + ' <span class="mut">· ' + esc(v.author) + '</span>' : '<span class="mut">—</span>'}</td>
+      <td class="mut nowrap">${ago(v.at)}</td>
+      <td class="r nowrap">
+        <button class="btn sm" data-act="pin|${team}|${name}|${res}|${v.ref}">${r.pinned === v.ref ? 'Unpin' : 'Pin'}</button>
+        <button class="btn sm" data-act="noop">▶ Trigger with version</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function badgePage(team, name) {
+  const pl = P.getPipeline(team, name);
+  return `<div class="pg"><h1>Status badge · ${esc(name)}</h1>
+    <p>${P.miniGraphSVG(pl, 400, 100)}</p>
+    <p class="mut">Embed:</p><pre class="editor" style="min-height:0">![PikoCI](https://ci.example.com/teams/${team}/pipelines/${name}/image.svg)</pre></div>`;
+}
+
+// ---------- router ----------
+function render(r) {
+  header(r); sidebar(r);
+  const m = document.getElementById('main');
+  const [a, b, c, d, e, f] = r;
+  if (!a) m.innerHTML = dashboard();
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else if (a === 'b') { const bl = P.getBuild(b); m.innerHTML = bl ? jobPage(bl.team, bl.pipeline, bl.job.split('/')[0], bl.id) : 'not found'; }
+  else if (a === 'p' && d === 'j') m.innerHTML = jobPage(b, c, e, f);
+  else if (a === 'p' && d === 'r') m.innerHTML = resourcePage(b, c, e);
+  else if (a === 'p' && d === 'config') m.innerHTML = Pages.editor(b, c);
+  else if (a === 'p' && d === 'badge') m.innerHTML = badgePage(b, c);
+  else if (a === 'p') m.innerHTML = pipelinePage(b, c);
+  else m.innerHTML = `<div class="pg">Not found</div>`;
+}
+App.start(render);
+</script>
+</body></html>

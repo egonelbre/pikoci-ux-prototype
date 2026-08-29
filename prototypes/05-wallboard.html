@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>05 · Wallboard — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { background: #14100d; color: #e8e2dc; min-height: 100vh; }
+  header { display: flex; align-items: center; gap: 14px; padding: 8px 18px; }
+  header a { color: #b1a89f; } header a.on { color: #fff; font-weight: 700; }
+  header .logo { font-weight: 700; color: #29ADFF; }
+  .clock { font-family: ui-monospace, Menlo, monospace; color: #7a7168; }
+  .board { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; padding: 12px 18px; }
+  .tile { border-radius: 8px; padding: 14px; color: #fff; display: block; position: relative; min-height: 120px; }
+  .tile:hover { text-decoration: none; outline: 3px solid #fff; }
+  .tile h3 { margin: 0; font-size: 17px; }
+  .tile .tm { opacity: .8; font-size: 12px; }
+  .tile .big { position: absolute; right: 12px; top: 10px; font-size: 26px; }
+  .tile .foot { position: absolute; left: 14px; right: 14px; bottom: 10px; font-size: 12px; display: flex; justify-content: space-between; opacity: .95; }
+  .attnbar { padding: 4px 18px; display: flex; gap: 18px; font-size: 14px; flex-wrap: wrap; }
+  /* focus board */
+  .jobtile { border-radius: 8px; padding: 12px; color: #fff; display: block; min-height: 86px; position: relative; }
+  .jobtile:hover { text-decoration: none; outline: 3px solid #fff; }
+  /* build overlay */
+  .light { background: #faf8f6; color: #1f1a16; min-height: calc(100vh - 42px); }
+  .tvbtn { cursor: pointer; }
+  body.tv header .navlinks, body.tv footer { display: none; }
+  body.tv .board { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  body.tv .tile { min-height: 160px; }
+  footer { padding: 5px 14px; font-size: 12px; color: #7a7168; }
+  footer a { color: #b1a89f; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<div id="main"></div>
+<footer><b>Variation 05 · Wallboard</b> (CCTray/Concourse-HD-inspired: a status wall first, drill-down second; TV mode for the office screen) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header>
+    <span class="logo">▞ PikoCI</span>
+    <span class="navlinks">${l('', 'Wall', sec === '' || sec === 'p' || sec === 'b')} ${l('teams', 'Teams', sec === 'teams')}
+    ${l('workers', 'Workers', sec === 'workers')} ${l('audit', 'Audit', sec === 'audit')} ${l('settings', 'Settings', sec === 'settings')}</span>
+    <span class="sp"></span>
+    <span class="clock" data-live-times>${new Date().toLocaleTimeString()}</span>
+    <span class="tvbtn" onclick="document.body.classList.toggle('tv')" title="TV mode">📺</span>
+  </header>`;
+}
+
+function wall() {
+  const attn = [];
+  for (const pl of DATA.pipelines) for (const a of P.pipelineAttention(pl))
+    attn.push({ pl, ...a });
+  const running = P.runningBuilds();
+  return `
+  <div class="attnbar">
+    ${attn.length === 0 ? '<span class="st-succeeded">✓ all green</span>' : ''}
+    ${attn.map(a => a.kind === 'approval'
+      ? `<a class="st-waiting_for_approval" href="#/p/${a.pl.team}/${a.pl.name}/${a.job}">⧖ ${esc(a.pl.name)}/${esc(a.job)} needs approval</a>`
+      : a.kind === 'check-error'
+        ? `<a class="st-errored" href="#/p/${a.pl.team}/${a.pl.name}">! ${esc(a.pl.name)}: ${esc(a.res)} check failing</a>`
+        : `<a class="st-failed" href="#/p/${a.pl.team}/${a.pl.name}/${a.job}">✕ ${esc(a.pl.name)}/${esc(a.job)}</a>`).join('')}
+    ${running.map(b => `<a class="st-started pulse" href="#/b/${b.id}">● ${esc(b.pipeline)}/${esc(b.job)} running</a>`).join('')}
+  </div>
+  <div class="board">
+    ${DATA.pipelines.map(pl => {
+    const s = P.pipelineStatus(pl);
+    const lastB = P.pipelineBuilds(pl)[0];
+    return `<a class="tile ${s === 'started' ? 'pulse' : ''}" href="#/p/${pl.team}/${pl.name}" style="background:${st(s).color}">
+      <h3>${esc(pl.name)}</h3><div class="tm">${esc(pl.team)}${pl.paused ? ' · ❚❚ paused' : ''}</div>
+      <span class="big">${st(s).sym}</span>
+      <div style="margin-top:8px;opacity:.9">${P.miniGraphSVG(pl, 200, 40).replace(/#d5cfc9/g, 'rgba(255,255,255,.5)')}</div>
+      <div class="foot"><span>${lastB ? '#' + lastB.n + ' · ' + ago(lastB.start) : 'no builds'}</span><span>${st(s).label}</span></div>
+    </a>`;
+  }).join('')}
+  </div>`;
+}
+
+// focus board: one pipeline, jobs as tiles
+function focusBoard(team, name, hl) {
+  const pl = P.getPipeline(team, name);
+  return `
+  <div class="attnbar" style="padding-top:10px">
+    <a href="#/">← wall</a> <b style="font-size:16px">${esc(team)}/${esc(name)}</b>
+    ${pl.paused ? '<span class="st-paused">❚❚ paused</span>' : ''}
+    <span class="sp"></span>
+    <a class="chip" href="#/p/${team}/${name}/config" style="border-color:#3a322b;color:#b1a89f">config</a>
+    <a class="chip" onclick="P.ACT.pausePipeline('${team}','${name}')" style="border-color:#3a322b;color:#b1a89f;cursor:pointer">${pl.paused ? 'unpause' : 'pause'}</a>
+  </div>
+  <div class="board">
+    ${pl.jobs.map(j => {
+    const s = P.jobStatus(pl, j.name);
+    const b = P.latestBuild(pl, j.name);
+    return `<a class="jobtile ${s === 'started' ? 'pulse' : ''} " href="${b ? '#/b/' + b.id : '#'}"
+        style="background:${st(s).color};${hl === j.name ? 'outline:3px solid #fff' : ''}">
+      <b style="font-size:15px">${esc(j.name)}</b>${j.matrix ? ' ×' + j.matrix.length : ''}${j.approve ? ' ⧖' : ''}
+      <div style="opacity:.85;font-size:12px;margin-top:4px">${b ? '#' + b.n + ' · ' + st(s).label + ' · ' + fmtDur(P.buildDur(b)) : 'no builds'}</div>
+      <div style="position:absolute;right:10px;bottom:8px">${P.historyStrip(pl, j.name, 6)}</div>
+    </a>`;
+  }).join('')}
+    ${pl.resources.map(r => `<a class="jobtile" href="#/p/${team}/${name}/res/${r.name}"
+      style="background:#241d18;border:1px dashed #4a423b">
+      <b style="font-size:14px;color:#b1a89f">↻ ${esc(r.name)}</b>
+      <div style="font-size:12px;color:#7a7168;margin-top:4px">
+        ${r.checkError ? '<span class="st-errored">⚠ check failing</span>' : 'checked ' + ago(r.lastCheck)}
+        ${r.pinned ? ' · <span class="st-started">📌 ' + esc(r.pinned) + '</span>' : ''}</div></a>`).join('')}
+  </div>`;
+}
+
+function buildPage(id) {
+  const b = P.getBuild(id);
+  if (!b) return '<div class="pg">not found</div>';
+  const pl = P.getPipeline(b.team, b.pipeline);
+  const j = pl.jobs.find(x => x.name === b.job.split('/')[0]);
+  return `<div class="attnbar" style="padding-top:10px">
+      <a href="#/p/${b.team}/${b.pipeline}">← ${esc(b.pipeline)}</a>
+      <b style="font-size:16px" class="st-${b.status}">${st(b.status).sym} ${esc(b.job)} #${b.n}</b>
+      ${P.buildMeta(b)}<span class="sp"></span>${P.buildActions(b)}</div>
+    ${b.status === 'waiting_for_approval' ? `<div class="attnbar"><span class="st-waiting_for_approval">⧖ ${esc(j && j.approve ? j.approve.name : 'approval')} — 1/${j && j.approve ? j.approve.need : 2} approvals (maria ✓)</span></div>` : ''}
+    <div style="padding:10px 18px">
+      ${b.steps.map((sp, i) => `<div style="margin-bottom:10px">
+        <div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:14px">
+          <span class="st-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
+          <span style="color:#7a7168">${sp.type}</span><b>${esc(sp.name)}</b>
+          <span class="sp"></span><span style="color:#7a7168">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+        ${sp.log.length ? P.renderLog(sp.log, { id: 'w' + i }) : ''}</div>`).join('')}
+    </div>`;
+}
+
+function resPage(team, name, res) {
+  const pl = P.getPipeline(team, name);
+  const r = pl.resources.find(x => x.name === res);
+  return `<div class="light"><div class="pg"><h1><a href="#/p/${team}/${name}">← ${esc(name)}</a> · ${esc(res)}</h1>
+    ${r.checkError ? `<div class="errbox">⚠ ${esc(r.checkError)}</div>` : `<div class="okbox">✓ checked ${ago(r.lastCheck)}</div>`}
+    <table class="tbl">${r.versions.map(v => `<tr><td width="20">${r.pinned === v.ref ? '📌' : ''}</td>
+      <td><code>${esc(v.ref)}</code></td><td>${esc(v.msg || '')}</td><td class="mut">${ago(v.at)}</td>
+      <td class="r"><button class="btn sm" data-act="pin|${team}|${name}|${res}|${v.ref}">${r.pinned === v.ref ? 'Unpin' : 'Pin'}</button></td></tr>`).join('')}</table>
+  </div></div>`;
+}
+
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b, c, d, e] = r;
+  const light = html => `<div class="light">${html}</div>`;
+  if (!a) m.innerHTML = wall();
+  else if (a === 'teams') m.innerHTML = light(Pages.teams());
+  else if (a === 'workers') m.innerHTML = light(Pages.workers());
+  else if (a === 'audit') m.innerHTML = light(Pages.audit({ user: b }));
+  else if (a === 'settings') m.innerHTML = light(Pages.settings());
+  else if (a === 'b') m.innerHTML = buildPage(b);
+  else if (a === 'p' && d === 'config') m.innerHTML = light(Pages.editor(b, c));
+  else if (a === 'p' && d === 'res') m.innerHTML = resPage(b, c, e);
+  else if (a === 'p') m.innerHTML = focusBoard(b, c, d);
+  else m.innerHTML = light('<div class="pg">Not found</div>');
+}
+App.start(render);
+</script>
+</body></html>

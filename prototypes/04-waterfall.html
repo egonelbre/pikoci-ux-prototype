@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>04 · Waterfall — PikoCI UX</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: #14352b; color: #fff; flex: none; }
+  header a { color: #b9d6cc; } header a.on { color: #fff; font-weight: 700; }
+  header .logo { font-weight: 700; color: #4fd07d; }
+  main { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+  .runhead { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #e4ddd6; background: #fff; flex: none; }
+  .views { display: flex; gap: 2px; background: #efeae5; border-radius: 6px; padding: 2px; }
+  .views a { padding: 3px 12px; border-radius: 5px; color: #4a423b; font-size: 13px; }
+  .views a.on { background: #fff; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .content { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .wfwrap { flex: 1; overflow: auto; padding: 16px; }
+  .wfrow { display: flex; align-items: center; height: 30px; }
+  .wfrow .lbl { width: 220px; flex: none; display: flex; gap: 7px; align-items: center; font-size: 13px; }
+  .wfrow .lane { flex: 1; position: relative; height: 100%; border-left: 1px solid #eee7e0; }
+  .wfbar { position: absolute; top: 6px; height: 18px; border-radius: 3px; cursor: pointer; min-width: 6px; }
+  .wfbar:hover { outline: 2px solid #1f1a16; }
+  .wfbar .d { position: absolute; left: 100%; padding-left: 6px; font-size: 11px; color: #7a7168; white-space: nowrap; top: 1px; }
+  .gridline { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #eee7e0; }
+  .gridlbl { position: absolute; top: -14px; font-size: 10px; color: #b1a89f; }
+  /* bottom panel */
+  .panel { flex: none; height: 45%; border-top: 2px solid #1f1a16; display: flex; flex-direction: column; background: #fff; }
+  .panelhead { display: flex; gap: 10px; align-items: center; padding: 6px 14px; border-bottom: 1px solid #e4ddd6; flex: none; }
+  .panelbody { flex: 1; overflow: auto; min-height: 0; }
+  .content.dock-right { flex-direction: row; }
+  .content.dock-right .panel { height: auto; width: 46%; border-top: none; border-left: 2px solid #1f1a16; }
+  footer { flex: none; padding: 5px 14px; background: #f2ede8; border-top: 1px solid #e4ddd6; font-size: 12px; color: #7a7168; }
+</style>
+</head><body>
+<div id="hdr"></div>
+<main id="main"></main>
+<footer><b>Variation 04 · Waterfall</b> (Buildkite-inspired: one run, three views — waterfall / table / list — with a dockable step panel) · <a href="index.html">← all variations</a></footer>
+
+<script src="shared/data.js"></script>
+<script src="shared/proto.js"></script>
+<script>
+const { esc, st, fmtDur, ago, App, Pages } = P;
+let dock = 'bottom'; // panel dock preference
+
+function runsFor(pl) {
+  const map = new Map();
+  for (const b of P.pipelineBuilds(pl)) { if (!map.has(b.n)) map.set(b.n, []); map.get(b.n).push(b); }
+  return [...map.entries()].sort((x, y) => y[0] - x[0]).map(([n, builds]) => ({
+    n, builds, pl,
+    status: builds.map(b => b.status).sort((a, b) => P.RANK[a] - P.RANK[b])[0],
+    start: Math.min(...builds.map(b => b.start)),
+    end: builds.some(b => !b.end) ? null : Math.max(...builds.map(b => b.end)),
+  }));
+}
+
+function header(route) {
+  const sec = route[0] || '';
+  const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
+  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+    ${l('', 'Pipelines', ['', 'p', 'run'].includes(sec))} ${l('teams', 'Teams', sec === 'teams')}
+    ${l('workers', 'Workers', sec === 'workers')} ${l('audit', 'Audit', sec === 'audit')}
+    <span class="sp"></span>${l('settings', 'egon ⚙', sec === 'settings')}</header>`;
+}
+
+function home() {
+  return `<div class="pg" style="max-width:900px"><h1>Pipelines</h1>
+  ${DATA.pipelines.map(pl => {
+    const s = P.pipelineStatus(pl);
+    const runs = runsFor(pl).slice(0, 6);
+    return `<section class="card"><div class="cardhead">
+      <span class="st-${s} ${s === 'started' ? 'pulse' : ''}" style="font-size:16px">${st(s).sym}</span>
+      <a href="#/p/${pl.team}/${pl.name}"><b>${esc(pl.team)}/${esc(pl.name)}</b></a>
+      <span class="mut">${esc(pl.desc)}</span><span class="sp"></span>
+      <a class="btn sm" href="#/p/${pl.team}/${pl.name}/config">Config</a>
+      <button class="btn sm" data-act="pausePipeline|${pl.team}|${pl.name}">${pl.paused ? '▶' : '❚❚'}</button></div>
+      <table class="tbl"><tbody>${runs.map(r => `<tr>
+        <td width="26"><span class="st-${r.status}">${st(r.status).sym}</span></td>
+        <td><a href="#/run/${pl.team}/${pl.name}/${r.n}">run #${r.n}</a></td>
+        <td><span class="hstrip">${r.builds.map(b => `<span class="hcell" title="${esc(b.job)}" style="background:${st(b.status).color}"></span>`).join('')}</span></td>
+        <td class="mut nowrap">${ago(r.start)}</td>
+        <td class="mut r">${r.end ? fmtDur((r.end - r.start) / 1000) : '<span class="st-started pulse">running</span>'}</td></tr>`).join('')}
+      </tbody></table></section>`;
+  }).join('')}</div>`;
+}
+
+function pipelinePage(team, name) {
+  const pl = P.getPipeline(team, name);
+  const runs = runsFor(pl);
+  return `<div class="pg" style="max-width:900px"><h1>${esc(team)}/${esc(name)}</h1>
+    <div class="filters">
+      <a class="btn" href="#/p/${team}/${name}/config">Config</a>
+      <button class="btn" data-act="pausePipeline|${team}|${name}">${pl.paused ? '▶ Unpause' : '❚❚ Pause'}</button>
+      ${pl.resources.map(r => `<a class="chip" href="#/run/${team}/${name}/${runs.length ? runs[0].n : 0}">${r.checkError ? '⚠ ' : ''}${r.pinned ? '📌 ' : ''}${esc(r.name)}</a>`).join('')}</div>
+    <table class="tbl"><thead><tr><th></th><th>Run</th><th>Jobs</th><th>When</th><th>Duration</th></tr></thead><tbody>
+    ${runs.map(r => `<tr><td width="26"><span class="st-${r.status}">${st(r.status).sym}</span></td>
+      <td><a href="#/run/${team}/${name}/${r.n}"><b>#${r.n}</b></a></td>
+      <td><span class="hstrip">${r.builds.map(b => `<span class="hcell" title="${esc(b.job)}" style="background:${st(b.status).color}"></span>`).join('')}</span></td>
+      <td class="mut">${ago(r.start)}</td><td class="mut">${r.end ? fmtDur((r.end - r.start) / 1000) : 'running'}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+// ---------- run page with waterfall / table views + dockable panel ----------
+function runPage(team, name, n, view, selId) {
+  const pl = P.getPipeline(team, name);
+  const run = runsFor(pl).find(r => r.n === +n);
+  if (!run) return `<div class="pg">Run not found</div>`;
+  view = view || 'waterfall';
+  const sel = selId ? P.getBuild(selId) : null;
+  const t0 = run.start, t1 = Math.max(...run.builds.map(b => b.end || Date.now()));
+  const span = Math.max(t1 - t0, 1000);
+
+  let body = '';
+  if (view === 'waterfall') {
+    const totalSec = span / 1000;
+    const ticks = [];
+    const stepSec = totalSec > 600 ? 120 : totalSec > 120 ? 60 : 15;
+    for (let s = 0; s <= totalSec; s += stepSec) ticks.push(s);
+    body = `<div class="wfwrap" id="wf" data-keep-scroll><div style="position:relative;padding-top:16px">
+      ${run.builds.slice().sort((a, b) => a.start - b.start).map(b => {
+        const l = (b.start - t0) / span * 100, w = Math.max(((b.end || Date.now()) - b.start) / span * 100, .8);
+        return `<div class="wfrow">
+          <div class="lbl"><span class="st-${b.status} ${b.status === 'started' ? 'pulse' : ''}">${st(b.status).sym}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.job)}</span></div>
+          <div class="lane">
+            ${ticks.map(s => `<div class="gridline" style="left:${s / totalSec * 100}%"><span class="gridlbl">${fmtDur(s)}</span></div>`).join('')}
+            <div class="wfbar ${b.status === 'started' ? 'pulse' : ''}" style="left:${l}%;width:${w}%;background:${st(b.status).color}"
+              onclick="location.hash='#/run/${team}/${name}/${n}/waterfall/${b.id}'">
+              <span class="d">${b.end ? fmtDur((b.end - b.start) / 1000) : '…'}</span></div>
+          </div></div>`;
+      }).join('')}
+    </div>
+    <div class="mut" style="margin-top:10px;font-size:12px">Total wall clock: <b>${fmtDur(span / 1000)}</b> · sum of job time: <b>${fmtDur(run.builds.reduce((a, b) => a + ((b.end || Date.now()) - b.start) / 1000, 0))}</b> — the gap is your parallelism win. Click a bar for logs.</div></div>`;
+  } else { // table
+    body = `<div class="wfwrap"><table class="tbl">
+      <thead><tr><th></th><th>Job</th><th>Started</th><th>Duration</th><th>Worker</th><th>Versions</th><th></th></tr></thead><tbody>
+      ${run.builds.slice().sort((a, b) => P.RANK[a.status] - P.RANK[b.status]).map(b => `<tr>
+        <td><span class="st-${b.status}">${st(b.status).sym}</span></td>
+        <td><a href="#/run/${team}/${name}/${n}/table/${b.id}"><b>${esc(b.job)}</b></a></td>
+        <td class="mut">+${fmtDur((b.start - t0) / 1000)}</td>
+        <td class="mut">${b.end ? fmtDur((b.end - b.start) / 1000) : '<span class="st-started">running</span>'}</td>
+        <td class="mut">${esc(b.worker)}</td>
+        <td>${Object.values(b.versions).map(v => `<code>${esc(String(v).slice(0, 7))}</code>`).join(' ')}</td>
+        <td class="r">${P.buildActions(b)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  }
+
+  let panel = '';
+  if (sel) {
+    panel = `<div class="panel">
+      <div class="panelhead">
+        <span class="st-${sel.status}">${st(sel.status).sym}</span><b>${esc(sel.job)}</b> ${P.buildMeta(sel)}
+        <span class="sp"></span>${P.buildActions(sel)}
+        <button class="btn sm" onclick="window._dock()" title="dock">${dock === 'bottom' ? '◨' : '⬓'}</button>
+        <a class="btn sm" href="#/run/${team}/${name}/${n}/${view}">✕</a></div>
+      <div class="panelbody" id="panelbody" data-keep-scroll ${sel.status === 'started' ? 'data-follow' : ''}>
+        ${sel.status === 'waiting_for_approval' ? `<div class="warnbox" style="margin:10px">⧖ waiting for approval (1/2 — maria ✓)
+          <button class="btn primary sm" data-act="approve|${sel.id}">Approve</button>
+          <button class="btn danger sm" data-act="reject|${sel.id}">Reject</button></div>` : ''}
+        ${sel.steps.map((sp, i) => `<div>
+          <div style="display:flex;gap:8px;padding:5px 12px;background:#f2ede8;align-items:center;font-size:13px">
+            <span class="st-${sp.status}">${st(sp.status).sym}</span><span class="mut">${sp.type}</span><b>${esc(sp.name)}</b>
+            <span class="sp"></span><span class="mut">${sp.dur ? fmtDur(sp.dur) : ''}</span></div>
+          ${sp.log.length ? P.renderLog(sp.log, { id: 'p' + i }) : ''}</div>`).join('')}
+      </div></div>`;
+  }
+  const V = v => `<a class="${view === v ? 'on' : ''}" href="#/run/${team}/${name}/${n}/${v}${sel ? '/' + sel.id : ''}">${v}</a>`;
+  return `<div class="runhead">
+      <a href="#/p/${team}/${name}">${esc(team)}/${esc(name)}</a><b>run #${n}</b>
+      <span class="badge" style="background:${st(run.status).color}">${st(run.status).sym} ${st(run.status).label}</span>
+      <span class="mut" data-live-times>${ago(run.start)} · ${fmtDur(span / 1000)}</span>
+      <span class="views">${V('waterfall')}${V('table')}</span>
+      <span class="sp"></span>
+      ${run.status === 'waiting_for_approval' || run.builds.some(b => b.status === 'waiting_for_approval') ?
+      run.builds.filter(b => b.status === 'waiting_for_approval').map(b =>
+        `<button class="btn primary" data-act="approve|${b.id}">⧖ Approve ${esc(b.job)}</button>`).join('') : ''}
+    </div>
+    <div class="content ${dock === 'right' && sel ? 'dock-right' : ''}">${body}${panel}</div>`;
+}
+window._dock = () => { dock = dock === 'bottom' ? 'right' : 'bottom'; App.refresh(); };
+
+function render(r) {
+  header(r);
+  const m = document.getElementById('main');
+  const [a, b, c, d, e, f] = r;
+  if (!a) m.innerHTML = home();
+  else if (a === 'teams') m.innerHTML = Pages.teams();
+  else if (a === 'workers') m.innerHTML = Pages.workers();
+  else if (a === 'audit') m.innerHTML = Pages.audit({ user: b });
+  else if (a === 'settings') m.innerHTML = Pages.settings();
+  else if (a === 'b') { const bl = P.getBuild(b); m.innerHTML = bl ? runPage(bl.team, bl.pipeline, bl.n, 'waterfall', bl.id) : 'not found'; }
+  else if (a === 'p' && d === 'config') m.innerHTML = Pages.editor(b, c);
+  else if (a === 'p') m.innerHTML = pipelinePage(b, c);
+  else if (a === 'run') m.innerHTML = runPage(b, c, d, e, f);
+  else m.innerHTML = `<div class="pg">Not found</div>`;
+}
+App.start(render);
+</script>
+</body></html>

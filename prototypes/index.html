@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PikoCI UX prototypes</title>
+<link rel="stylesheet" href="shared/base.css">
+<style>
+  .hero { max-width: 980px; margin: 0 auto; padding: 30px 20px 10px; }
+  .grid { max-width: 980px; margin: 0 auto; padding: 10px 20px 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .v { border: 1px solid #e4ddd6; border-radius: 8px; background: #fff; padding: 14px 16px; display: block; color: inherit; }
+  .v:hover { text-decoration: none; box-shadow: 0 3px 10px rgba(0,0,0,.09); }
+  .v h3 { margin: 0 0 4px; } .v h3 .n { color: #b1a89f; font-weight: 400; }
+  .v .insp { font-size: 12px; color: #7a7168; margin-bottom: 6px; }
+  .v .q { font-size: 13px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eee7e0; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 9px; background: #efeae5; margin-right: 4px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head><body>
+<div class="hero">
+  <h1 style="font-size:24px">▞ PikoCI — UX prototypes</h1>
+  <p>Twelve interactive layout paradigms over the <b>same fake dataset</b> (3 teams, 5 pipelines, a live "running" build, a deploy waiting for approval, a failed docs build, a failing resource check, a stuck pending build). Every prototype covers the full app surface: dashboard, pipeline, jobs, builds + logs, resources & pinning, approval gates, HCL config, teams, workers, audit, settings.</p>
+  <p class="mut">Try in each one: <b>find why the docs build is red</b> → how many clicks to the error line? · <b>approve the pikoci deploy</b> (it's waiting) · <b>watch test-integration</b> (it's running and streams live) · <b>find the stuck terraform build</b> and why it's stuck. Scoring criteria live in <code>REQUIREMENTS.md §4</code>; the survey behind the paradigms in <code>RESEARCH.md</code>.</p>
+</div>
+<div class="grid">
+  <a class="v" href="01-graph-first.html">
+    <h3><span class="n">01</span> Graph-first</h3>
+    <div class="insp">Concourse</div>
+    The DAG <i>is</i> the pipeline page; nodes are the navigation. Dashboard is a wall of mini-graph cards.
+    <div class="q"><span class="tag">structure ★</span><span class="tag">matches PikoCI model</span> Weak at: flat lists, many-pipeline nav.</div>
+  </a>
+  <a class="v" href="02-runs-first.html">
+    <h3><span class="n">02</span> Runs-first</h3>
+    <div class="insp">GitHub Actions</div>
+    Commit-centric run list; run page = job sidebar + step-collapsed dark log. Matrix jobs grouped.
+    <div class="q"><span class="tag">familiarity ★</span><span class="tag">time-to-log ★</span> Weak at: cross-pipeline overview, DAG comprehension.</div>
+  </a>
+  <a class="v" href="03-stage-columns.html">
+    <h3><span class="n">03</span> Stage columns</h3>
+    <div class="insp">GitLab CI</div>
+    DAG layers rendered as stage columns of job pills; pipeline list rows carry mini stage-dots; job page = log + metadata sidebar.
+    <div class="q"><span class="tag">scanability ★</span> Weak at: deep/wide DAGs, resource-centric thinking.</div>
+  </a>
+  <a class="v" href="04-waterfall.html">
+    <h3><span class="n">04</span> Waterfall</h3>
+    <div class="insp">Buildkite</div>
+    A run is a timing chart: waterfall + table views over the same build, dockable log panel (bottom/right).
+    <div class="q"><span class="tag">perf insight ★</span><span class="tag">multi-view</span> Weak at: first-time simplicity.</div>
+  </a>
+  <a class="v" href="05-wallboard.html">
+    <h3><span class="n">05</span> Wallboard</h3>
+    <div class="insp">CCTray · Concourse HD</div>
+    Big status tiles for the office TV (📺 toggle), attention ticker on top, tiles drill into job tiles then logs.
+    <div class="q"><span class="tag">time-to-red ★</span><span class="tag">glanceable</span> Weak at: dense information work.</div>
+  </a>
+  <a class="v" href="06-miller-columns.html">
+    <h3><span class="n">06</span> Miller columns</h3>
+    <div class="insp">Finder · TeamCity tree</div>
+    Team → pipeline → job → build as side-by-side columns; every level visible at once, detail pane on the right.
+    <div class="q"><span class="tag">orientation ★</span><span class="tag">scale ★</span> Weak at: structure (no DAG picture).</div>
+  </a>
+  <a class="v" href="07-terminal.html">
+    <h3><span class="n">07</span> Terminal</h3>
+    <div class="insp">k9s · lazygit</div>
+    Keyboard-first dense monospace UI: j/k navigate, enter drills, <code>/</code> filters, <code>t</code> trigger, <code>a</code> approve, <code>:</code> switches views, <code>?</code> help.
+    <div class="q"><span class="tag">speed ★</span><span class="tag">daily-driver</span> Weak at: discoverability, mouse users.</div>
+  </a>
+  <a class="v" href="08-trace-log.html">
+    <h3><span class="n">08</span> Trace</h3>
+    <div class="insp">Dagger Cloud</div>
+    Every build is a trace of spans with a timeline; first failure surfaced in a dedicated error box; log pane per span.
+    <div class="q"><span class="tag">why-failed ★</span><span class="tag">why-slow ★</span> Weak at: pipeline-level structure.</div>
+  </a>
+  <a class="v" href="09-activity-feed.html">
+    <h3><span class="n">09</span> Activity feed</h3>
+    <div class="insp">Vercel · Netlify</div>
+    One reverse-chron stream of every build across teams; expand in place, approve/retry in place; filter chips; phone-friendly.
+    <div class="q"><span class="tag">what-happened ★</span><span class="tag">mobile ★</span> Weak at: structure, org-scale noise.</div>
+  </a>
+  <a class="v" href="10-dense-table.html">
+    <h3><span class="n">10</span> Dense table</h3>
+    <div class="insp">TeamCity · Jenkins classic</div>
+    Max information per pixel: weather icons, duration sparklines, change correlation ("Changes" view), favorites, inline actions.
+    <div class="q"><span class="tag">density ★</span><span class="tag">ops ★</span> Weak at: beauty, newcomers.</div>
+  </a>
+  <a class="v" href="11-attention-inbox.html">
+    <h3><span class="n">11</span> Attention inbox</h3>
+    <div class="insp">novel (triage queue)</div>
+    Home is a ranked inbox of everything needing a human — approvals, failures with inline error, stuck builds, failing checks, forgotten pauses — with one-click actions. Green work stays collapsed.
+    <div class="q"><span class="tag">action proximity ★</span><span class="tag">inbox-zero</span> Weak at: browsing healthy state.</div>
+  </a>
+  <a class="v" href="13-synthesis.html" style="grid-column:1/-1;border-color:#1f1a16">
+    <h3><span class="n">13</span> Synthesis <span class="tag" style="background:#1f1a16;color:#fff">recommended starting point</span></h3>
+    <div class="insp">layers 11 + 01 + 10 + 02 + 04 + 08 + 07</div>
+    One answer to "which one handles all the concerns": <b>attention inbox strip</b> on top of a <b>card wall</b> (home) · pipeline page where <b>graph / table / runs are toggles</b> over the same data · <b>error-first build page</b> with collapsible step logs and build history strip · <b>waterfall at run level</b> · <b>⌘K palette</b> + <code>f</code> next-failure + <code>/</code> filter as accelerators, never the only path.
+    <div class="q">Each paradigm survives as a <i>layer</i> where it wins, instead of a destination that must carry everything.</div>
+  </a>
+  <a class="v" href="14-change-centric.html" style="grid-column:1/-1;border-color:#1f6feb">
+    <h3><span class="n">14</span> Change-centric <span class="tag" style="background:#1f6feb;color:#fff">PR / automated-test mode</span></h3>
+    <div class="insp">fixes 13's blind spot: concurrent PRs</div>
+    The change (PR/commit) becomes a first-class axis: PR rows with per-job dots, <b>every graph and waterfall scoped to one commit</b> (with a "mixed latest" mode kept only to demonstrate why unscoped coloring lies), ownership-scoped inbox (your failures vs. their failures vs. trunk), superseded commits auto-cancelled and demoted, fork PRs gated behind "run CI with/without secrets", queue-position surfacing.
+    <div class="q">Compare with 13 on the same question: "why is my PR red?" — then note what 13's pipeline-centric home cannot answer.</div>
+  </a>
+  <a class="v" href="12-canvas-map.html">
+    <h3><span class="n">12</span> Canvas map</h3>
+    <div class="insp">spatial / infinite canvas</div>
+    Every pipeline is an island on one pan/zoom map — the whole org is literally a single picture; click nodes for a HUD with builds and actions.
+    <div class="q"><span class="tag">mental map ★</span> Weak at: text tasks, accessibility, very large orgs.</div>
+  </a>
+</div>
+</body></html>
