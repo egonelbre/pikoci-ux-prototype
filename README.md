@@ -26,11 +26,6 @@ goal is to compare information architecture and flows, then pick a direction.
   (108 findings total across eight review rounds, all folded in; the
   retired round 1–4 review files measured convergence 22→16→13→12 and
   produced the stopping rule v4.1 adopts). Start here.
-- `PLAN-REVIEW-5.md` — the fifth (latest) adversarial round; its fix
-  batch (R5-1..R5-5) is deliberately deferred until the external
-  round-5 pass returns (`REVIEW-PROMPT-CODEX.md` is that prompt).
-  Rounds 1–4 were retired once every finding was dispositioned in
-  UX-PLAN v4.1.
 - `REQUIREMENTS.md` — system requirements, roles, user journeys, and the scoring
   criteria (§4) for judging prototypes.
 - `SCENARIOS.md` — comprehensive catalog of 81 CI/CD usage scenarios, each
