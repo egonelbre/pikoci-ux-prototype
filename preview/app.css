@@ -130,7 +130,14 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .ctbl tbody tr { cursor: pointer; }
 .ctbl tbody tr:hover td { background: var(--bg2); }
 .ctbl .dots { gap: 3px; }
-.ct-title { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the title column is the flexible one: it absorbs leftover width and
+   truncates first, so the table fits its container instead of scrolling */
+.ct-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctbl .ct-title { width: 100%; max-width: 0; min-width: 16ch; }
+.ctt { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.ctt > * { flex: none; }
+.ctt .row-link { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trunc-code { display: inline-block; max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .mine-row td:first-child { box-shadow: inset 3px 0 var(--accent); }
 /* PR detail: graph + checks side by side, wrapping when narrow */
 .pr-cols { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; margin-bottom: 12px; }

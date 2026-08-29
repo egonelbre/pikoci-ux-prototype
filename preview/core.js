@@ -560,6 +560,8 @@
       // scroll positions, folded/expanded panes, open <details>, filter focus.
       const saves = [];
       document.querySelectorAll('[data-keep-scroll]').forEach(el => { if (el.id) saves.push([el.id, el.scrollTop]); });
+      // table scroll containers: keep horizontal position by index (stable within a view)
+      const tblX = [...document.querySelectorAll('.tbl-scroll')].map(el => el.scrollLeft);
       const folds = {};
       document.querySelectorAll('[data-fold]').forEach(el => { folds[el.getAttribute('data-fold')] = el.hidden; });
       const dets = {};
@@ -591,6 +593,7 @@
       });
       if (refocus) { const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
       for (const [id, t] of saves) { const el = document.getElementById(id); if (el) el.scrollTop = t; }
+      [...document.querySelectorAll('.tbl-scroll')].forEach((el, i) => { if (tblX[i]) el.scrollLeft = tblX[i]; });
       window.scrollTo(0, wy);
       document.querySelectorAll('[data-follow]').forEach(el => { el.scrollTop = el.scrollHeight; });
     },

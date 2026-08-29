@@ -163,15 +163,16 @@
         const old = l.changes.filter(c => c.superseded).length;
         return `<tr class="${P.mine(l) ? 'mine-row' : ''}" onclick="location.hash='#/changes/pr/${l.n}'">
           <td class="c-${isHeld ? 'held' : s} ${s === 'started' ? 'pulse' : ''}">${isHeld ? '⛔' : st(s).sym}</td>
-          <td class="ct-title" title="${esc(l.title)}"><a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
+          <td class="ct-title" title="${esc(l.title)}"><div class="ctt">
+            <a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
             ${l.draft ? '<span class="chip">draft</span>' : ''}${l.fork ? '<span class="chip">fork</span>' : ''}
             ${isHeld ? '<span class="badge held-badge">held</span>' : ''}
             ${P.mine(l) ? '<span class="chip mine-chip">yours</span>' : ''}
             ${old ? `<span class="chip" title="superseded commits — builds auto-cancelled within this lineage">+${old} superseded</span>` : ''}
-            ${l.forge ? `<a class="mut small" href="${esc(l.forge.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="open on ${esc(l.forge.kind)}">↗</a>` : ''}</td>
+            ${l.forge ? `<a class="mut small" href="${esc(l.forge.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="open on ${esc(l.forge.kind)}">↗</a>` : ''}</div></td>
           <td class="mut small nowrap" title="${esc(lpl.team)}/${esc(lpl.name)}">${esc(lpl.name.replace(/-pr$/, ''))}</td>
           <td class="mut nowrap">${esc(l.author)}</td>
-          <td class="nowrap"><code>${esc(l.branch)}</code> <code>${esc(head.id.ref)}</code></td>
+          <td class="nowrap"><code class="trunc-code" title="${esc(l.branch)}">${esc(l.branch)}</code> <code>${esc(head.id.ref)}</code></td>
           <td class="r nowrap"><span class="dots" onclick="event.stopPropagation()">
             ${l.summary ? l.summary.map((sst, i) => VIEWS.dotStatic(sst, jobNames[i] || 'check')).join('')
           : lpl.jobs.map(j => VIEWS.jobDot(lpl, j.name, head.id.ref)).join('')}</span></td>
