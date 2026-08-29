@@ -3,6 +3,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>05 · Wallboard — PikoCI UX</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../logo/px/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../logo/px/favicon-16.png">
 <link rel="stylesheet" href="shared/base.css">
 <style>
   body { background: #14100d; color: #e8e2dc; min-height: 100vh; }
@@ -44,7 +46,7 @@ function header(route) {
   const sec = route[0] || '';
   const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
   document.getElementById('hdr').innerHTML = `<header>
-    <span class="logo">▞ PikoCI</span>
+    <span class="logo"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.1em;vertical-align:-0.18em"> PikoCI</span>
     <span class="navlinks">${l('', 'Wall', sec === '' || sec === 'p' || sec === 'b')} ${l('teams', 'Teams', sec === 'teams')}
     ${l('workers', 'Workers', sec === 'workers')} ${l('audit', 'Audit', sec === 'audit')} ${l('settings', 'Settings', sec === 'settings')}</span>
     <span class="sp"></span>

@@ -14,7 +14,7 @@
     const active = id => (sec === id || (id === 'home' && !route[0]) || (id === 'pipelines' && ['p', 'b'].includes(sec))) ? 'on' : '';
     const tsel = P.team();
     return `<header>
-      <a class="logo" href="#/">▞ PikoCI <span class="preview-tag">preview</span></a>
+      <a class="logo" href="#/"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.15em;vertical-align:-0.2em"> PikoCI <span class="preview-tag">preview</span></a>
       <select class="team-sel" aria-label="team scope" title="team scope — filters every page (maps to the backend's team scoping)"
         onchange="P.setTeam(this.value)">
         <option value="">all teams</option>

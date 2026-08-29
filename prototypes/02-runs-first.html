@@ -3,6 +3,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>02 · Runs-first — PikoCI UX</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../logo/px/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../logo/px/favicon-16.png">
 <link rel="stylesheet" href="shared/base.css">
 <style>
   body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
@@ -68,7 +70,7 @@ function runCommit(run) {
 function header(route) {
   const sec = route[0] || '';
   const l = (h, label, on) => `<a href="#/${h}" class="${on ? 'on' : ''}">${label}</a>`;
-  document.getElementById('hdr').innerHTML = `<header><span class="logo">▞ PikoCI</span>
+  document.getElementById('hdr').innerHTML = `<header><span class="logo"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.1em;vertical-align:-0.18em"> PikoCI</span>
     ${l('', 'Runs', ['', 'p', 'r', 'b'].includes(sec))} ${l('teams', 'Teams', sec === 'teams')}
     ${l('workers', 'Workers', sec === 'workers')} ${l('audit', 'Audit', sec === 'audit')}
     <span class="sp"></span>

@@ -3,6 +3,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PikoCI UX prototypes</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../logo/px/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../logo/px/favicon-16.png">
 <link rel="stylesheet" href="shared/base.css">
 <style>
   .hero { max-width: 980px; margin: 0 auto; padding: 30px 20px 10px; }
@@ -17,7 +19,7 @@
 </style>
 </head><body>
 <div class="hero">
-  <h1 style="font-size:24px">▞ PikoCI — UX prototypes</h1>
+  <h1 style="font-size:24px"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.1em;vertical-align:-0.18em"> PikoCI — UX prototypes</h1>
   <p>Twelve interactive layout paradigms over the <b>same fake dataset</b> (3 teams, 5 pipelines, a live "running" build, a deploy waiting for approval, a failed docs build, a failing resource check, a stuck pending build). Every prototype covers the full app surface: dashboard, pipeline, jobs, builds + logs, resources & pinning, approval gates, HCL config, teams, workers, audit, settings.</p>
   <p class="mut">Try in each one: <b>find why the docs build is red</b> → how many clicks to the error line? · <b>approve the pikoci deploy</b> (it's waiting) · <b>watch test-integration</b> (it's running and streams live) · <b>find the stuck terraform build</b> and why it's stuck. Scoring criteria live in <code>REQUIREMENTS.md §4</code>; the survey behind the paradigms in <code>RESEARCH.md</code>.</p>
 </div>
