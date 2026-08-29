@@ -16,6 +16,12 @@ four places: lifecycle details the preview simplified, docs-promised UI the
 preview never picked up, plan-features that read as if they exist today, and
 terminology.
 
+> **Status:** buckets A and D were fixed in the preview (commit after
+> 5c2edc6): gate lifecycle + reject-with-reason, cron-resource scheduling,
+> `--concurrency` as N registered workers, dispatch/admin-only/drain copy,
+> services wrapping the run, delete-only tokens, past-tense audit actions,
+> and the terminology table below. Buckets B and C remain open.
+
 ## A. Fidelity bugs — preview is wrong about today's product (fix in preview)
 
 1. **Gate lifecycle.** Docs: a gated build waits consuming *no worker

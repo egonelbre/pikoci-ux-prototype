@@ -31,7 +31,7 @@
     return l;
   };
   const intgLog = (n) => {
-    const l = ['$ make integration', 'starting service postgres:16 ... up (1.2s)', 'starting service redis:7 ... up (0.4s)', 'running 48 integration specs'];
+    const l = ['$ make integration', 'services already up (started before this step)', 'running 48 integration specs'];
     for (let i = 1; i <= n; i++) l.push(`  ✓ spec ${String(i).padStart(2, '0')} (${(Math.random() * 2 + 0.1).toFixed(2)}s)`);
     if (n >= 48) l.push('', '48 passed, 0 failed');
     return l;
@@ -130,10 +130,12 @@
       id: 'b' + (_id++), team: o.team || 'main', pipeline, job, n, status,
       start: now - startAgo,
       end: ['started', 'pending', 'waiting_for_approval'].includes(status) ? null : now - startAgo + durSec * 1000,
-      worker: o.worker || 'helsinki-1',
+      // a gated build waits consuming no worker (Approval-Gates.md); pending
+      // builds are queued, also unassigned — a worker exists only once started
+      worker: ['pending', 'waiting_for_approval'].includes(status) ? null : (o.worker || 'helsinki-1'),
       // provenance (K1): intent at creation, resolution at execution
       intent: { versions: { [o.res || 'git.pikoci']: ref }, configRev: o.configRev || 13 },
-      resolved: status === 'pending' ? null : { versions: { [o.res || 'git.pikoci']: ref }, worker: o.worker || 'helsinki-1' },
+      resolved: ['pending', 'waiting_for_approval'].includes(status) ? null : { versions: { [o.res || 'git.pikoci']: ref }, worker: o.worker || 'helsinki-1' },
       cause: o.cause || { kind: 'version', detail: `git.pikoci ${ref}`, runId: 'run-' + ref },
       heldReason: o.heldReason || null, // K7: sub-state of pending
       queue: o.queue || null,
@@ -160,10 +162,14 @@
       b('pikoci', 'test-matrix--macos', n, 'succeeded', ref, ago - 3e3, 188, [S('git.pikoci', 'get', 'succeeded', 6, gitLog(ref)), S('go test (macos)', 'task', 'succeeded', 180, testLog(true))], { worker: 'mac-mini' });
     }
     if (o.stopAfterUnit) return;
+    // services wrap the run (Pipeline.md): they start BEFORE any get/task
+    // step and get an unconditional stop at the end, whatever happened between
     b('pikoci', 'test-integration', n, o.intg || 'succeeded', ref, ago - 200e3, 78, [
+      S('services: start', 'services', 'succeeded', 3, ['postgres:16 up', 'redis:7 up']),
       S('git.pikoci', 'get', 'succeeded', 5, gitLog(ref)),
-      S('services', 'task', 'succeeded', 3, ['postgres:16 up', 'redis:7 up']),
       S('integration', 'task', o.intg || 'succeeded', 70, intgLog(o.intg === 'started' ? 23 : 48)),
+      S('services: stop', 'services', o.intg === 'started' ? 'pending' : 'succeeded', 1,
+        o.intg === 'started' ? [] : ['postgres:16 stopped', 'redis:7 stopped', 'stop runs unconditionally, even after failure']),
     ]);
     if (o.stopAfterIntg) return;
     b('pikoci', 'build', n, 'succeeded', ref, ago - 290e3, 92, [S('git.pikoci', 'get', 'succeeded', 6, gitLog(ref)), S('compile', 'task', 'succeeded', 86, ['$ make build', 'go build -trimpath -o pikoci .', 'sha256: 4b7c9d21e8aa…', 'build: OK'])],
@@ -175,12 +181,16 @@
           { id: 'compile/wall', value: 80 + ((n * 7) % 13), unit: 's', better: 'lower' },
           { id: 'bench/SchedulerTick', value: +(41 + ((n * 11) % 9) + (n === 143 ? 6 : 0)).toFixed(1), unit: 'µs/op', better: 'lower' },
         ] });
+    // gate lifecycle (Approval-Gates.md): the gate blocks the WHOLE build —
+    // while waiting, no step has run and no worker is held; on approval the
+    // build goes Approved → Pending (queued) → Started.
+    const wait = o.deploy === 'waiting_for_approval';
     b('pikoci', 'deploy', n, o.deploy || 'succeeded', ref, ago - 400e3, 34, [
-      S('git.pikoci', 'get', 'succeeded', 5, gitLog(ref)),
-      S('approval: deploy to production', 'approve', o.deploy === 'waiting_for_approval' ? 'pending' : 'succeeded', 0,
-        o.deploy === 'waiting_for_approval' ? ['waiting for 2 approvals (1/2)', 'approved by maria 12 minutes ago'] : ['approved by maria', 'approved by egon', 'gate passed']),
-      S('deploy', 'task', o.deploy === 'waiting_for_approval' ? 'pending' : 'succeeded', 29,
-        o.deploy === 'waiting_for_approval' ? [] : ['$ ./deploy.sh production', 'rolling restart on ci.pikoci.com ... done', 'health check: 200 OK', 'deploy: OK']),
+      S('approval: deploy to production', 'approve', wait ? 'pending' : 'succeeded', 0,
+        wait ? ['waiting for 2 approvals (1/2)', 'approved by maria 12 minutes ago'] : ['approved by maria', 'approved by egon', 'gate passed']),
+      S('git.pikoci', 'get', wait ? 'pending' : 'succeeded', 5, wait ? [] : gitLog(ref)),
+      S('deploy', 'task', wait ? 'pending' : 'succeeded', 29,
+        wait ? [] : ['$ ./deploy.sh production', 'rolling restart on ci.pikoci.com ... done', 'health check: 200 OK', 'deploy: OK']),
     ], { cause: { kind: 'passed', detail: 'after build', runId: 'run-' + ref } });
   }
   trunkRun(138, 'f0b6d15', 3 * day);
@@ -300,9 +310,10 @@
   prBuild('test-matrix--linux', 191, 'succeeded', '8899aa1', 22 * min, 139, [S('git.pikoci-pr', 'get', 'succeeded', 5, gitLog('8899aa1')), S('go test (linux)', 'task', 'succeeded', 132, testLog(true))]);
   prBuild('test-matrix--macos', 190, 'pending', '8899aa1', 12 * min, 0, [], { queue: { matching: 1, busy: true, ahead: 0, tag: 'darwin' } });
   prBuild('test-integration', 172, 'started', '8899aa1', 6 * min, 0, [
+    S('services: start', 'services', 'succeeded', 4, ['postgres:16 up', 'redis:7 up', 'mysql:8 up (TLS)']),
     S('git.pikoci-pr', 'get', 'succeeded', 5, gitLog('8899aa1')),
-    S('services', 'task', 'succeeded', 4, ['postgres:16 up', 'redis:7 up', 'mysql:8 up (TLS)']),
     S('integration', 'task', 'started', 0, intgLog(4)),
+    S('services: stop', 'services', 'pending', 0, []),
   ]);
   // #489 fork: HELD build (K7) — pending + held-untrusted
   prBuild('lint', 205, 'pending', 'fee1bad', 40 * min, 0, [], { heldReason: 'held-untrusted' });
@@ -326,13 +337,16 @@
     { team: 'platform', res: 'git.infra', cause: { kind: 'manual', detail: 'manual by maria', runId: 'run-manual-42' }, queue: { matching: 0, busy: false, ahead: 0, tag: 'terraform' } });
 
   // --- oss/hello-world: cron ---
-  // ticks 210, 209, 207 built; tick-208 deliberately has NO build so its
-  // overlap-skipped decision record is what renders (a build at the same
-  // ref would shadow the decision in jobCell)
+  // a cron version's identity is its DATE (Cron.md: the version field is
+  // `date`, not a ref) — ticks are minute-precision timestamps, 10min apart
+  const tickAt = agoMin => new Date(now - agoMin * min).toISOString().slice(0, 16) + 'Z';
+  // ticks at -10/-20/-40min built (builds 210/209/207); the -30min tick
+  // deliberately has NO build so its overlap-skipped decision record is what
+  // renders (a build at the same version would shadow the decision in jobCell)
   for (const i of [0, 1, 3]) {
-    b('hello-world', 'gen', 210 - i, 'succeeded', 'tick-' + (210 - i), (10 + i * 10) * min, 2,
-      [S('cron.every-10m', 'get', 'succeeded', 0, ['version: tick-' + (210 - i)]), S('echo', 'task', 'succeeded', 1, ['$ echo IN', 'IN'])],
-      { team: 'oss', res: 'cron.every-10m', cause: { kind: 'cron', detail: 'tick', runId: 'run-tick-' + (210 - i) } });
+    b('hello-world', 'gen', 210 - i, 'succeeded', tickAt(10 + i * 10), (10 + i * 10) * min, 2,
+      [S('cron.every-10m', 'get', 'succeeded', 0, ['version: date=' + tickAt(10 + i * 10)]), S('echo', 'task', 'succeeded', 1, ['$ echo IN', 'IN'])],
+      { team: 'oss', res: 'cron.every-10m', cause: { kind: 'cron', detail: 'tick', runId: 'run-cron-' + (210 - i) } });
   }
 
   // ---------- decision records (K5): two families --------------------------
@@ -352,7 +366,7 @@
     { pipeline: 'pikoci-pr', job: 'test-integration', ref: 'c0ffee1', family: 'wont_run', code: 'superseded', text: 'superseded by 9aa31c2', at: now - 55 * min },
     { pipeline: 'release', job: 'tag-release', ref: '9f31c02', family: 'waiting', code: 'pause', text: 'pipeline paused by egon — "hold during v0.9.3 investigation"', at: now - 5 * hr },
     { pipeline: 'release', job: 'tag-release', ref: 'c7b2f90', family: 'waiting', code: 'pinned-mismatch', text: 'git.pikoci pinned to f0b6d15 — newer versions ignored', at: now - 3 * hr },
-    { pipeline: 'hello-world', job: 'gen', ref: 'tick-208', family: 'wont_run', code: 'overlap-skipped', text: 'previous run still active at tick — overlap policy: skip', at: now - 30 * min },
+    { pipeline: 'hello-world', job: 'gen', ref: tickAt(30), family: 'wont_run', code: 'overlap-skipped', text: 'previous run still active at tick — overlap policy: skip', at: now - 30 * min },
   ];
 
   // ---------- pipelines -----------------------------------------------------
@@ -383,7 +397,9 @@
         { name: 'test-integration', inputs: [{ res: 'git.pikoci', trigger: true, passed: ['lint', 'test-unit'] }] },
         { name: 'build', inputs: [{ res: 'git.pikoci', trigger: true, passed: ['test-integration'] }, { res: 'cron.nightly', trigger: false, passed: [] }] },
         { name: 'deploy', approve: { name: 'deploy to production', need: 2 }, env: 'prod', inputs: [{ res: 'git.pikoci', trigger: true, passed: ['build'] }] },
-        { name: 'nightly-e2e', cadence: '@daily', inputs: [{ res: 'cron.nightly', trigger: true, passed: [] }], lastSuccess: now - 40 * hr },
+        // scheduled purely by its cron trigger — cron is a RESOURCE with
+        // check_interval (Cron.md), never a job attribute
+        { name: 'nightly-e2e', inputs: [{ res: 'cron.nightly', trigger: true, passed: [] }], lastSuccess: now - 40 * hr },
       ],
     },
     {
@@ -391,7 +407,7 @@
       primaryContext: { kind: 'lineages', label: 'open PRs', resource: 'git.pikoci-pr' },
       paused: false, pausedMeta: null, configRev: 7,
       configHistory: [{ rev: 7, by: 'egon', at: now - 5 * day, note: 'pr_hold = "forks"' }],
-      resources: [{ name: 'git.pikoci-pr', type: 'git (pr)', pinned: null, checkEvery: '1m', lastCheck: now - 30e3, checkError: null, versions: LINEAGES.flatMap(l => l.changes) }],
+      resources: [{ name: 'git.pikoci-pr', type: 'git', params: { pr: true }, pinned: null, checkEvery: '1m', lastCheck: now - 30e3, checkError: null, versions: LINEAGES.flatMap(l => l.changes) }],
       jobs: [
         { name: 'lint', tier: 'cheap', inputs: [{ res: 'git.pikoci-pr', trigger: true, passed: [] }] },
         { name: 'test-unit', tier: 'cheap', inputs: [{ res: 'git.pikoci-pr', trigger: true, passed: [] }] },
@@ -450,7 +466,7 @@
       paused: false, pausedMeta: null, configRev: 1, configHistory: [{ rev: 1, by: 'egon', at: now - 60 * day, note: 'initial' }],
       resources: [{
         name: 'cron.every-10m', type: 'cron', pinned: null, checkEvery: '@every 10m', lastCheck: now - 4 * min, checkError: null,
-        versions: [{ id: { ref: 'tick-210' }, meta: { at: now - 10 * min } }, { id: { ref: 'tick-209' }, meta: { at: now - 20 * min } }],
+        versions: [{ id: { ref: tickAt(10) }, meta: { at: now - 10 * min } }, { id: { ref: tickAt(20) }, meta: { at: now - 20 * min } }],
       }],
       jobs: [{ name: 'gen', inputs: [{ res: 'cron.every-10m', trigger: true, passed: [] }] }],
     },
@@ -546,7 +562,7 @@
           primaryContext: { kind: 'lineages', label: 'open PRs', resource: res },
           paused: false, pausedMeta: null, configRev: 2,
           configHistory: [{ rev: 2, by: author, at: now - (3 + i) * day, note: 'add lint tier' }],
-          resources: [{ name: res, type: 'git (pr)', versions: [] }],
+          resources: [{ name: res, type: 'git', params: { pr: true }, versions: [] }],
           jobs: [{ name: 'lint', inputs: [{ res }] }, { name: 'test', inputs: [{ res }] }],
         });
         return;
@@ -731,14 +747,14 @@
     { name: 'aws-arm', provider: 'AWS ASG · c7g.2xlarge', team: null, tags: ['linux', 'arm64'], min: 0, max: 4, idleTtl: '5m', bootSecs: 95, terminatedToday: 3, buildsToday: 11 },
   ];
   const WORKERS = [
-    { name: 'helsinki-1', status: 'online', team: null, tags: ['linux', 'docker', 'exec'], version: 'v0.9.4', running: 0, disk: 0.34, cpu: 0.06, slots: 4 },
-    { name: 'helsinki-2', status: 'online', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 2, disk: 0.91, cpu: 0.71, slots: 4 },
-    { name: 'mac-mini', status: 'online', team: 'main', tags: ['darwin', 'exec'], version: 'v0.9.3', running: 0, disk: 0.58, cpu: 0.11, slots: 2 },
-    { name: 'builder-gpu', status: 'stale', team: 'platform', tags: ['linux', 'gpu', 'terraform'], version: 'v0.9.1', lastSeen: now - 3 * hr, running: 0, disk: 0.12, cpu: null, slots: 2 },
+    { name: 'helsinki-1', status: 'online', team: null, tags: ['linux', 'docker', 'exec'], version: 'v0.9.4', running: 0, disk: 0.34, cpu: 0.06, concurrency: 4 },
+    { name: 'helsinki-2', status: 'online', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 2, disk: 0.91, cpu: 0.71, concurrency: 4 },
+    { name: 'mac-mini', status: 'online', team: 'main', tags: ['darwin', 'exec'], version: 'v0.9.3', running: 0, disk: 0.58, cpu: 0.11, concurrency: 2 },
+    { name: 'builder-gpu', status: 'stale', team: 'platform', tags: ['linux', 'gpu', 'terraform'], version: 'v0.9.1', lastSeen: now - 3 * hr, running: 0, disk: 0.12, cpu: null, concurrency: 2 },
     // gcp-ci pool: two live instances + one still booting
-    { name: 'gcp-ci-7f3a', pool: 'gcp-ci', ephemeral: true, status: 'online', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 3, slots: 4, disk: 0.22, cpu: 0.93, up: 38 * min },
-    { name: 'gcp-ci-9c21', pool: 'gcp-ci', ephemeral: true, status: 'online', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 1, slots: 4, disk: 0.15, cpu: 0.42, up: 12 * min },
-    { name: 'gcp-ci-b04d', pool: 'gcp-ci', ephemeral: true, status: 'provisioning', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 0, slots: 4, disk: 0, cpu: null, up: 40e3 },
+    { name: 'gcp-ci-7f3a', pool: 'gcp-ci', ephemeral: true, status: 'online', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 3, concurrency: 4, disk: 0.22, cpu: 0.93, up: 38 * min },
+    { name: 'gcp-ci-9c21', pool: 'gcp-ci', ephemeral: true, status: 'online', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 1, concurrency: 4, disk: 0.15, cpu: 0.42, up: 12 * min },
+    { name: 'gcp-ci-b04d', pool: 'gcp-ci', ephemeral: true, status: 'provisioning', team: null, tags: ['linux', 'docker'], version: 'v0.9.4', running: 0, concurrency: 4, disk: 0, cpu: null, up: 40e3 },
     // aws-arm pool: scaled to zero right now — no instance rows at all
   ];
 
@@ -791,13 +807,13 @@
     }
   })();
   const AUDIT = [
-    { at: now - 5 * min, user: 'maria', action: 'build.approve', target: 'main/pikoci deploy #142', detail: 'approval 1/2 · bound to c7b2f90 @ config rev 13' },
-    { at: now - 14 * min, user: 'system', action: 'build.create', target: 'main/pikoci #143', detail: 'version git.pikoci 9f31c02' },
-    { at: now - 40 * min, user: 'system', action: 'build.hold', target: 'main/pikoci-pr lint #205', detail: 'held-untrusted: fork PR #489' },
-    { at: now - 3 * hr, user: 'system', action: 'build.supersede', target: 'main/pikoci-pr c0ffee1', detail: 'lineage PR #481 — superseded by 9aa31c2, 2 builds cancelled' },
-    { at: now - 5 * hr, user: 'egon', action: 'resource.pin', target: 'main/release git.pikoci', detail: 'f0b6d15 · "last known-good for v0.9.3" · until —' },
-    { at: now - 5 * hr, user: 'egon', action: 'pipeline.pause', target: 'main/release', detail: '"hold during v0.9.3 investigation" · until ' + new Date(now - hr).toISOString().slice(0, 16) },
-    { at: now - 2 * day, user: 'egon', action: 'pipeline.set', target: 'main/pikoci', detail: 'config rev 13 (CAS ok, base rev 12)' },
+    { at: now - 5 * min, user: 'maria', action: 'build.approved', target: 'main/pikoci deploy #142', detail: 'approval 1/2 · bound to c7b2f90 @ config rev 13' },
+    { at: now - 14 * min, user: 'system', action: 'build.created', target: 'main/pikoci #143', detail: 'version git.pikoci 9f31c02' },
+    { at: now - 40 * min, user: 'system', action: 'build.held', target: 'main/pikoci-pr lint #205', detail: 'held-untrusted: fork PR #489' },
+    { at: now - 3 * hr, user: 'system', action: 'build.superseded', target: 'main/pikoci-pr c0ffee1', detail: 'lineage PR #481 — superseded by 9aa31c2, 2 builds cancelled' },
+    { at: now - 5 * hr, user: 'egon', action: 'resource.pinned', target: 'main/release git.pikoci', detail: 'f0b6d15 · "last known-good for v0.9.3" · until —' },
+    { at: now - 5 * hr, user: 'egon', action: 'pipeline.paused', target: 'main/release', detail: '"hold during v0.9.3 investigation" · until ' + new Date(now - hr).toISOString().slice(0, 16) },
+    { at: now - 2 * day, user: 'egon', action: 'pipeline.updated', target: 'main/pikoci', detail: 'config rev 13 (CAS ok, base rev 12)' },
   ];
 
   window.DATA = {

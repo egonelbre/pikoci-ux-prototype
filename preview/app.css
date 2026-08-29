@@ -319,6 +319,8 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 /* boxes */
 .warnbox { background: color-mix(in srgb, var(--run) 8%, var(--bg1)); border: 1px solid color-mix(in srgb, var(--run) 35%, var(--line)); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
 .errbox { background: color-mix(in srgb, var(--bad) 6%, var(--bg1)); border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--line)); border-radius: 8px; padding: 9px 14px; margin-bottom: 12px; }
+.rejbox { display: flex; gap: 8px; margin-top: 8px; }
+.rejbox input { flex: 1; min-width: 0; }
 .empty { text-align: center; padding: 60px 20px; }
 
 /* palette */

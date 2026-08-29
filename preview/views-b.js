@@ -128,7 +128,7 @@
           <td><code>${esc(v.id.ref)}</code></td>
           <td>${esc(v.meta.msg || '')} ${v.meta.author ? `<span class="mut small">· ${esc(v.meta.author)}</span>` : ''}</td>
           <td class="mut small nowrap">${ago(v.meta.at)}</td>
-          <td><span class="dots">${pl.jobs.filter(j => !j.cadence).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
+          <td><span class="dots">${pl.jobs.filter(P.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
         </tr>`;
       }).join('')}</table></div>
       ${res.pinned ? `<div class="warnbox gap">📌 pinned to <code>${esc(res.pinned.ref)}</code> by <b>${esc(res.pinned.actor)}</b> — "${esc(res.pinned.reason)}" (${ago(res.pinned.at)}). Newer versions are ignored; escape hatches carry actor + reason.</div>` : ''}`;
@@ -233,7 +233,7 @@
     return `<div class="page"><h1>Pipelines</h1>
       <div class="ctoolbar">
         <input data-filter aria-label="filter pipelines" placeholder="filter team, name, description…  ( / )" value="${esc(pipFilter)}" oninput="_pipF(this.value)">
-        ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● running')}${chip('paused', '❚❚ paused')}${chip('pr', '⇅ PR checks')}
+        ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● started')}${chip('paused', '❚❚ paused')}${chip('pr', '⇅ PR checks')}
         <span class="sp"></span>
         <span class="mut small">${pls.length} of ${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span>
       </div>
@@ -269,14 +269,14 @@
     const actions = [];
     if (b.status === 'waiting_for_approval') actions.push(
       `<button class="btn primary" data-act="approve" data-arg="${b.id}">✓ Approve</button>`,
-      `<button class="btn danger" data-act="reject" data-arg="${b.id}">✕ Reject</button>`);
+      `<button class="btn danger" data-act="rejectask" data-arg="${b.id}">✕ Reject…</button>`);
     if (s === 'held') actions.push(`<button class="btn primary" data-act="release" data-arg="${b.id}">▶ Release</button>`);
     if (['started', 'pending'].includes(b.status) && s !== 'held') actions.push(`<button class="btn" data-act="cancel" data-arg="${b.id}">Cancel</button>`);
     if (['failed', 'succeeded', 'cancelled', 'warning'].includes(b.status)) actions.push(`<button class="btn" data-act="retry" data-arg="${b.id}">↻ Retry</button>`);
 
     // --- sidebar: the run's stages (jobs at this ref, DAG order, matrix grouped)
     const depths = layers(pl).depth;
-    const runJobs = pl.jobs.filter(x => !x.cadence).slice()
+    const runJobs = pl.jobs.filter(P.isRunJob).slice()
       .sort((a, c) => (depths[a.name] - depths[c.name]) || a.name.localeCompare(c.name));
     let sideJobs = '', lastGrp = null;
     for (const jj of runJobs) {
@@ -319,7 +319,7 @@
             · <span class="c-${s}">${st(s).label}</span> ${fmtDur(bDur(b)) ? '· ' + fmtDur(bDur(b)) : ''}
             · <span title="cause">${esc(b.cause.detail)}</span> · rev ${b.intent.configRev}
             ${b.retryOf ? ` · <span class="chip">retry of ${esc(b.retryOf)}</span>` : ''}
-            ${b.queue && s !== 'held' ? ` · <b>${b.queue.matching === 0 ? `no online worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker for "${esc(b.queue.tag)}", busy`}</b>` : ''}
+            ${b.queue && s !== 'held' ? ` · <b>${b.queue.matching === 0 ? `no healthy worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker for "${esc(b.queue.tag)}", busy`}</b>` : ''}
             ${s === 'held' ? ' · <b>held: awaiting maintainer release (fork PR)</b>' : ''}
             ${stall != null && stall > 60 ? ` · <b class="c-failed">no output for ${fmtDur(stall)}</b>` : ''}</div>
         </div>
@@ -355,6 +355,11 @@
             <div class="mut small">bound to <code>${esc(ref)}</code> @ config rev ${b.intent.configRev} · maria approved ${ago(Date.now() - 12 * 60e3)}
               · <a href="javascript:void(0)" onclick="document.getElementById('cmpbox')&&(document.getElementById('cmpbox').hidden=false)">diff since last deploy</a></div>
             ${newerExists ? `<div class="warn-line">⚠ <b>superseded-while-waiting</b>: trunk has moved past <code>${esc(ref)}</code> — approving deploys the bound version, not the newest.</div>` : ''}
+            <div class="mut small">while gated the build holds no worker and nothing has run — on approval it queues, then starts.</div>
+            <div class="rejbox" id="rejbox-${b.id}" hidden data-fold="rej:${b.id}">
+              <input aria-label="reject reason (required)" placeholder="reason — required, recorded in the audit log">
+              <button class="btn danger" data-act="reject" data-arg="${b.id}">✕ Reject build</button>
+            </div>
           </div>` : ''}
 
           ${failIdx >= 0 ? `<div class="err-first">
@@ -375,7 +380,7 @@
 
           ${!b.steps.length ? `<div class="panel"><div class="pad mut">
             ${s === 'held' ? 'Nothing has run — this build is held awaiting maintainer release; no code or secrets have touched a worker.'
-          : b.queue ? `Nothing has run yet — the build is queued (${b.queue.matching === 0 ? `no online worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker, busy`}). Output will stream here when a worker picks it up.`
+          : b.queue ? `Nothing has run yet — the build is queued (${b.queue.matching === 0 ? `no healthy worker with tag "${esc(b.queue.tag)}"` : `${b.queue.matching} matching worker, busy`}). Output will stream here when a worker picks it up.`
           : 'No output yet — steps will appear when the build starts.'}
           </div></div>` : ''}
           <div id="steps">
@@ -508,14 +513,16 @@
     const pools = D().pools.filter(p => !P.team() || !p.team || p.team === P.team());
     const online = workers.filter(w => w.status === 'online');
     const booting = workers.filter(w => w.status === 'provisioning');
-    const slots = online.reduce((s, w) => s + (w.slots || 1), 0);
+    // --concurrency N registers N single-build workers (name-1…name-N);
+    // capacity is counted in registered workers, not "slots" (Workers.md)
+    const regd = online.reduce((s, w) => s + (w.concurrency || 1), 0);
     const busy = online.reduce((s, w) => s + (w.running || 0), 0);
     const poolFor = t => pools.find(p => p.tags.includes(t));
     // per-tag capacity for tags in demand
     const tags = [...new Set(pend.map(b => b.queue.tag))];
     return `<div class="page"><h1>Queue${P.team() ? ` <span class="mut small">· team ${esc(P.team())}</span>` : ''}</h1>
       <div class="meta" data-live><b>${running.length}</b> running · <b>${pend.length}</b> queued ·
-        capacity <b>${busy}/${slots}</b> slots on ${online.length} online worker${online.length === 1 ? '' : 's'}${booting.length ? ` <b class="c-pending">+ ${booting.length} provisioning</b> (${booting.reduce((s, w) => s + (w.slots || 1), 0)} slots on the way)` : ''}</div>
+        capacity <b>${busy}/${regd}</b> registered workers busy <span class="mut small">(--concurrency N registers N single-build workers)</span> on ${online.length} healthy host${online.length === 1 ? '' : 's'}${booting.length ? ` <b class="c-pending">+ ${booting.length} provisioning</b> (${booting.reduce((s, w) => s + (w.concurrency || 1), 0)} more on the way)` : ''}</div>
       ${pend.length ? `<h2>Waiting</h2>
       <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th>why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
       ${pend.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
@@ -525,13 +532,13 @@
         <td class="${b.queue.matching === 0 && !poolFor(b.queue.tag) ? 'c-failed' : 'mut'} small">${b.queue.matching === 0
           ? (poolFor(b.queue.tag)
             ? `<span class="c-pending">pool ${esc(poolFor(b.queue.tag).name)} scaling up from zero (~${poolFor(b.queue.tag).bootSecs}s boot) — capacity on the way, not a config problem</span>`
-            : `no online worker with tag "${esc(b.queue.tag)}" and no pool serves it — config problem, not load`)
+            : `no healthy worker with tag "${esc(b.queue.tag)}" and no pool serves it — config problem, not load`)
           : `${b.queue.matching} matching worker, busy${b.queue.ahead ? ` · ${b.queue.ahead} ahead` : ''}`}</td>
         <td class="mut small r nowrap">${ago(b.start)}</td>
         <td class="r"><button class="btn sm" data-act="cancel" data-arg="${b.id}" onclick="event.stopPropagation()">Cancel</button></td>
       </tr>`).join('')}</table></div>` : '<div class="allclear">✓ Queue is empty — new jobs start as soon as a matching worker is free.</div>'}
       ${tags.length ? `<h2>Capacity by tag</h2>
-      <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th>tag</th><th>online workers</th><th class="r">busy</th><th class="r">queued</th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th>tag</th><th>healthy workers</th><th class="r">busy</th><th class="r">queued</th></tr></thead>
       ${tags.map(t => {
       const m = online.filter(w => w.tags.includes(t));
       const bp = booting.filter(w => w.tags.includes(t));
@@ -559,7 +566,10 @@
   // roll up into a count instead of littering the table.
   VIEWS.workers = function (name) {
     if (name) return VIEWS.workerDetail(name);
-    const workers = D().workers.filter(w => !P.team() || !w.team || w.team === P.team()); // shared workers serve every team
+    // Global workers are visible to every team, but dispatch PREFERS team
+    // workers: a global worker skips a team's builds while that team has a
+    // healthy team worker of its own (Workers.md)
+    const workers = D().workers.filter(w => !P.team() || !w.team || w.team === P.team());
     const pools = D().pools.filter(p => !P.team() || !p.team || p.team === P.team());
     const gauge = (frac, warnAt) => {
       if (frac == null) return '<span class="mut small" title="no fresh heartbeat — last known value withheld rather than shown as current">—</span>';
@@ -571,17 +581,17 @@
     const disk = w => gauge(w.status === 'stale' ? null : w.disk, 0.85);
     const cpu = w => gauge(w.status === 'stale' ? null : w.cpu, 0.9);
     const row = w => `<tr onclick="location.hash='#/workers/${encodeURIComponent(w.name)}'">
-        <td class="nowrap"><a class="row-link" href="#/workers/${encodeURIComponent(w.name)}"><b>${esc(w.name)}</b></a></td>
+        <td class="nowrap"><a class="row-link" href="#/workers/${encodeURIComponent(w.name)}"><b>${esc(w.name)}</b></a>${(w.concurrency || 1) > 1 ? ` <span class="mut small" title="--concurrency ${w.concurrency} registers ${esc(w.name)}-1…${esc(w.name)}-${w.concurrency} — each registered worker runs one build">×${w.concurrency}</span>` : ''}</td>
         <td class="nowrap">${w.status === 'provisioning'
         ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
-        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${P.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
-        <td>${w.team || '<span class="mut">shared</span>'}</td>
+        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${P.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
+        <td>${w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>'}</td>
         <td>${w.tags.map(t => `<code>${t}</code>`).join(' ')}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : cpu(w)}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : disk(w)}</td>
         <td class="mut small">${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}</td>
-        <td class="r">${w.running ? `${w.running}/${w.slots}` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
-        <td class="r">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="noop" onclick="event.stopPropagation()" title="${w.ephemeral ? 'drain = finish builds, then terminate early' : 'not wired up yet'}">drain</button>`}</td>
+        <td class="r">${w.running ? `${w.running}/${w.concurrency} busy` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
+        <td class="r">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="drain" data-arg="${esc(w.name)}" onclick="event.stopPropagation()" title="drain is worker-side today (SIGQUIT); click for details">drain</button>`}</td>
       </tr>`;
     const statics = workers.filter(w => !w.pool);
     const poolRows = pools.map(p => {
@@ -589,18 +599,18 @@
       const online = inst.filter(w => w.status === 'online').length;
       const booting = inst.filter(w => w.status === 'provisioning').length;
       return `<tr class="tsub"><td colspan="9">⛅ ${esc(p.name)}
-        <span class="mut">· ${esc(p.provider)} · autoscale ${p.min}–${p.max} · <b>${online} online</b>${booting ? ` + ${booting} provisioning` : ''}${online + booting === 0 ? ' — <b>scaled to zero</b> (first job boots one, ~' + p.bootSecs + 's)' : ''}
+        <span class="mut">· ${esc(p.provider)} · autoscale ${p.min}–${p.max} · <b>${online} healthy</b>${booting ? ` + ${booting} provisioning` : ''}${online + booting === 0 ? ' — <b>scaled to zero</b> (first job boots one, ~' + p.bootSecs + 's)' : ''}
         · idle TTL ${esc(p.idleTtl)} · today: ${p.buildsToday} builds on ${p.terminatedToday + online} instances</span></td></tr>
       ${inst.map(row).join('')}`;
     }).join('');
-    return `<div class="page"><h1>Workers${P.team() ? ` <span class="mut small">· team ${esc(P.team())} + shared</span>` : ''}</h1>
+    return `<div class="page"><h1>Workers${P.team() ? ` <span class="mut small">· team ${esc(P.team())} + Global</span>` : ''}</h1>
       <div class="tbl-scroll"><table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th>tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
       <tbody>
       ${statics.length ? `<tr class="tsub"><td colspan="9">static <span class="mut">· ${statics.length} registered</span></td></tr>${statics.map(row).join('')}` : ''}
       ${poolRows}
       </tbody></table></div>
       <p class="mut small">Ephemeral instances are addressed by pool, not by name: a build's provenance keeps the instance name as a tombstone record (it must never dangle), but health, drain, and capacity questions are asked of the pool. Terminated instances roll up into the pool's daily count.</p>
-      <p class="mut small">Read-role users see a sanitized summary (counts + tag match) instead of this table — a deliberate access rule.</p>
+      <p class="mut small">This dashboard is admin-only (Workers.md). Global workers skip a team's builds while that team has a healthy team worker — team workers win dispatch, global workers are the fallback.</p>
       <h2>Storage</h2>
       <div class="mut small pad-s">artifacts: — · logs: 41 MB · meta-records (decisions, receipts, config history): 2.1 MB — retention classes with reference-preservation apply (never orphan a config rev a kept build ran under).</div>
       <p class="mut small">Scheduling load lives under <a href="#/queue">Queue</a>. Click a worker for its telemetry.</p>
@@ -678,13 +688,13 @@
     return `<div class="page">
       <div class="crumbs"><a href="#/workers">workers</a> / <b>${esc(w.name)}</b>
         ${w.status === 'provisioning' ? '<span class="c-pending pulse">◌ provisioning</span>'
-        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">● ${w.status}</span>`}
+        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">● ${w.status === 'online' ? 'healthy' : w.status}</span>`}
         ${w.lastSeen ? `<span class="mut small">last heartbeat ${ago(w.lastSeen)}</span>` : ''}
         ${pool ? `<span class="chip" title="${esc(pool.provider)}">pool: ${esc(pool.name)}</span>` : ''}
         ${w.ephemeral && w.up ? `<span class="mut small">up ${fmtDur(w.up / 1000)}</span>` : ''}
-        <span class="mut small">${w.team || 'shared'} · ${w.tags.map(t => `<code>${esc(t)}</code>`).join(' ')} · ${esc(w.version)} · ${w.running || 0}/${w.slots} slots busy</span>
+        <span class="mut small">${w.team || 'Global'} · ${w.tags.map(t => `<code>${esc(t)}</code>`).join(' ')} · ${esc(w.version)} · --concurrency ${w.concurrency || 1}: ${w.running || 0} of ${w.concurrency || 1} registered busy</span>
         <span class="sp"></span>
-        <button class="btn" data-act="noop" title="${w.ephemeral ? 'finish builds, then terminate early' : 'not wired up yet'}">drain</button></div>
+        <button class="btn" data-act="drain" data-arg="${esc(w.name)}" title="drain is worker-side today (SIGQUIT); click for details">drain</button></div>
       ${w.status === 'stale' ? `<div class="warnbox">⚠ No heartbeat for ${ago(w.lastSeen)} — telemetry below ends there; nothing is fabricated past the last report.</div>` : ''}
       ${wk ? `
       <h2>${w.ephemeral && wk.hours < wkRange ? 'This instance’s lifetime' : 'Usage'}
@@ -750,9 +760,10 @@
       <section class="panel"><div class="panel-head"><b>Workers</b> <span class="mut small">(always reachable here, even on one-worker installs)</span></div>
         <div class="pad"><a href="#/workers">Open workers →</a> · <a href="#/queue">queue →</a></div></section>
       <section class="panel"><div class="panel-head"><b>Notifications</b></div>
-        <div class="pad mut small">Per-user channels land with K15 (Phase 3): a generic per-user webhook first — a forge comment can't carry a production-deploy approval. Until then, the Home strip and forge checks are the entry points, and this page says so instead of showing a dead matrix.</div></section>
+        <div class="pad mut small">Pipeline-level notifiers ship today: Slack/Discord webhooks and forge status checks (Notifications.md) — configured in the pipeline, not here. <b>Per-user</b> channels land with K15 (Phase 3): a generic per-user webhook first — a forge comment can't carry a production-deploy approval. Until then, the Home strip and forge checks are the per-person entry points, and this page says so instead of showing a dead matrix.</div></section>
       <section class="panel"><div class="panel-head"><b>API tokens</b></div>
-        <div class="pad mut small">cli-egon · personal · last used 1h ago — <button class="btn sm" data-act="noop">rotate</button> <button class="btn sm danger" data-act="noop">revoke</button></div></section>
+        <div class="pad mut small">cli-egon · personal — <button class="btn sm danger" data-act="noop">delete</button> <button class="btn sm" data-act="noop">create token…</button>
+        <div>tokens never rotate in place: delete + recreate (API-Tokens.md); a new token is shown once, capped at your role. Team <i>worker</i> tokens are the exception — regenerate them in Team settings.</div></div></section>
       <section class="panel"><div class="panel-head"><b>Audit</b></div><div class="pad"><a href="#/audit">Open audit log →</a></div></section>
     </div>`;
   };

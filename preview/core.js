@@ -10,12 +10,12 @@
   const STATUS = {
     succeeded: { color: 'var(--ok)', sym: '✓', label: 'succeeded' },
     failed: { color: 'var(--bad)', sym: '✕', label: 'failed' },
-    started: { color: 'var(--run)', sym: '●', label: 'running' },
+    started: { color: 'var(--run)', sym: '●', label: 'started' },
     pending: { color: 'var(--pend)', sym: '○', label: 'pending' },
     cancelled: { color: 'var(--cancel)', sym: '⊘', label: 'cancelled' },
     warning: { color: 'var(--warn)', sym: '!', label: 'passed (allowed failure)' }, // own glyph — never color-only vs ✓ (WCAG 1.4.1)
     skipped: { color: 'var(--pend)', sym: '◇', label: 'branch not taken' },
-    waiting_for_approval: { color: 'var(--appr)', sym: '⧖', label: 'needs approval' },
+    waiting_for_approval: { color: 'var(--appr)', sym: '⧖', label: 'waiting for approval' },
     held: { color: 'var(--appr)', sym: '⛔', label: 'held' },
     paused: { color: 'var(--pause)', sym: '❚❚', label: 'paused' },
     none: { color: 'var(--mut3)', sym: '·', label: 'no builds' },
@@ -72,6 +72,10 @@
   const pipelines = () => (D().soloMode ? D().pipelines.filter(p => p.name === 'hello-world') : D().pipelines).filter(inTeam);
   const getPipeline = name => D().pipelines.find(p => p.name === name);
   const getBuild = id => D().builds.find(b => b.id === id);
+  // scheduling is cron resources, not a job field (Cron.md): a "scheduled
+  // job" is simply one whose only trigger is a cron resource
+  const cronTrigger = j => (j.inputs || []).find(i => i.trigger && /^cron\./.test(i.res));
+  const isRunJob = j => (j.inputs || []).some(i => i.trigger && !/^cron\./.test(i.res));
   const vmeta = (pl, ref) => {
     for (const r of pl.resources) {
       const v = (r.versions || []).find(v => v.id.ref === ref);
@@ -288,16 +292,20 @@
       items.push({
         cls: 'stuck', icon: '⏳', pri: 2, key: 'stuck:' + b.id,
         text: `${b.pipeline} / ${b.job} #${b.n} pending ${ago(b.start)}`,
-        sub: q.matching === 0 ? `no online worker with tag "${q.tag}" — config problem, not load` : `${q.matching} matching worker for "${q.tag}", busy`,
+        sub: q.matching === 0 ? `no healthy worker with tag "${q.tag}" — config problem, not load` : `${q.matching} matching worker for "${q.tag}", busy`,
         actions: [{ label: 'Queue', href: '#/queue' }, { label: 'Cancel', act: 'cancel', arg: b.id }],
       });
     }
-    // overdue scheduled (D3)
+    // overdue scheduled (D3). Scheduling is cron RESOURCES with check_interval
+    // (Cron.md) — not a job attribute; overdue = the job's cron trigger keeps
+    // ticking but the job hasn't succeeded across recent ticks.
     for (const pl of pipelines()) for (const j of pl.jobs) {
-      if (j.cadence && j.lastSuccess && Date.now() - j.lastSuccess > 36 * 3600e3) {
+      const cronIn = cronTrigger(j);
+      if (cronIn && j.lastSuccess && Date.now() - j.lastSuccess > 36 * 3600e3) {
+        const res = pl.resources.find(r => r.name === cronIn.res);
         items.push({
           cls: 'overdue', icon: '⏰', pri: 2, key: 'overdue:' + pl.name + ':' + j.name,
-          text: `${pl.name} / ${j.name} overdue — cadence ${j.cadence}, last success ${ago(j.lastSuccess)}`,
+          text: `${pl.name} / ${j.name} overdue — ${cronIn.res} (${res ? res.checkEvery : 'cron'}) has ticked since; last success ${ago(j.lastSuccess)}`,
           sub: 'scheduled jobs alert on missed runs, not only failures',
           actions: [{ label: '▶ Run now', act: 'trigger', arg: pl.name + '|' + j.name }],
         });
@@ -361,12 +369,22 @@
       if (done.has(key)) return toast('Already approved — one vote per person', 'info');
       done.add(key);
       const b = getBuild(id); if (!b) return;
-      b.status = 'started'; b.start = Date.now(); b._lastOutput = Date.now();
+      // gate lifecycle (Approval-Gates.md): a gated build holds no worker and
+      // has run nothing; passing the gate makes it Pending (queued), then a
+      // worker picks it up and it goes Started.
       const ap = b.steps.find(s => s.type === 'approve');
       if (ap) { ap.status = 'succeeded'; ap.log.push('approved by egon just now', 'gate passed (2/2)'); }
-      b.steps.forEach(s => { if (s.status === 'pending') s.status = 'started'; });
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'build.approve', target: `${b.pipeline} ${b.job} #${b.n}`, detail: 'approval 2/2 — gate passed' });
-      toast('Approved — build started'); App.refresh();
+      b.status = 'pending';
+      b.queue = b.queue || { tag: 'linux', reason: 'gate passed — waiting for a worker' };
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'build.approved', target: `${b.pipeline} ${b.job} #${b.n}`, detail: 'approval 2/2 — gate passed' });
+      toast('Approved — build queued'); App.refresh();
+      setTimeout(() => { // a worker picks it up
+        b.status = 'started'; b.start = Date.now(); b._lastOutput = Date.now(); b.queue = null;
+        b.worker = 'helsinki-1';
+        b.resolved = { versions: b.intent.versions, worker: b.worker };
+        b.steps.forEach(s => { if (s.status === 'pending') s.status = 'started'; });
+        App.refresh();
+      }, 1500);
       setTimeout(() => {
         b.status = 'succeeded'; b.end = Date.now();
         b.steps.forEach(s => { if (s.status === 'started') s.status = 'succeeded'; });
@@ -378,15 +396,31 @@
         App.refresh();
       }, 9000);
     },
+    drain(name) {
+      // fidelity (Workers.md): drain is initiated ON the worker — SIGQUIT to
+      // the worker process; the server sends nothing. Server-initiated drain
+      // needs worker addressing and is a plan extension (K21).
+      const w = D().workers.find(x => x.name === name);
+      toast(w && w.ephemeral
+        ? 'Drain is worker-side today (SIGQUIT on the instance). Pool-level drain-and-terminate is planned (K21).'
+        : 'Drain is worker-side today: send SIGQUIT to the worker process — it finishes current builds and exits. Server-initiated drain is planned (K21).', 'info');
+    },
+    rejectask(id) { // reveal the reason box — rejecting REQUIRES a reason (Approval-Gates.md)
+      const box = document.getElementById('rejbox-' + id);
+      if (box) { box.hidden = !box.hidden; if (!box.hidden) { const i = box.querySelector('input'); if (i) i.focus(); } }
+    },
     reject(id) {
       const key = 'gate:' + id; // approve/reject share a gate key — first write wins
       if (done.has('approve:' + id) || done.has(key)) return toast('Already decided — the first response counted', 'info');
+      const box = document.getElementById('rejbox-' + id);
+      const reason = box ? (box.querySelector('input') || {}).value || '' : '';
+      if (!reason.trim()) return toast('A reason is required to reject', 'info');
       done.add(key);
       const b = getBuild(id); if (!b) return;
       b.status = 'failed'; b.end = Date.now();
       const ap = b.steps.find(s => s.type === 'approve');
-      if (ap) { ap.status = 'failed'; ap.log.push('rejected by egon just now'); }
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'build.reject', target: `${b.pipeline} ${b.job} #${b.n}`, detail: '' });
+      if (ap) { ap.status = 'failed'; ap.log.push('rejected by egon just now: ' + reason); }
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'build.rejected', target: `${b.pipeline} ${b.job} #${b.n}`, detail: reason });
       toast('Rejected — build failed'); App.refresh();
     },
     release(id) { // K7: release a held fork build (maintain+, audited)
@@ -398,7 +432,7 @@
       b.steps = [{ name: 'lint', type: 'task', status: 'started', dur: 0, log: ['$ make lint (released by egon — no secrets granted)', 'working…'] }];
       const ref = Object.values(b.intent.versions)[0];
       D().decisions = D().decisions.filter(d => !(d.ref === ref && d.code === 'held-untrusted'));
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'build.release', target: `${b.pipeline} ${b.job} #${b.n}`, detail: 'held-untrusted released (no secrets)' });
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'build.released', target: `${b.pipeline} ${b.job} #${b.n}`, detail: 'held-untrusted released (no secrets)' });
       toast('Released — CI running without secrets'); App.refresh();
       setTimeout(() => { b.status = 'succeeded'; b.end = Date.now(); b.steps[0].status = 'succeeded'; b.steps[0].dur = 40; b.steps[0].log.push('lint: OK'); App.refresh(); }, 8000);
     },
@@ -443,14 +477,14 @@
     },
     unpause(name) {
       const pl = getPipeline(name); pl.paused = false; pl.pausedMeta = null;
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'pipeline.unpause', target: name, detail: '' });
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'pipeline.unpaused', target: name, detail: '' });
       toast('Unpaused ' + name); App.refresh();
     },
     pause(name) {
       const pl = getPipeline(name);
       const reason = window.prompt('Reason (optional — prefilled for solo installs):', '—') || '—';
       pl.paused = true; pl.pausedMeta = { actor: 'egon', reason, at: Date.now(), until: null };
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'pipeline.pause', target: name, detail: `"${reason}"` });
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'pipeline.paused', target: name, detail: `"${reason}"` });
       toast('Paused ' + name); App.refresh();
     },
     check(arg) { toast('Checking ' + arg.split('|')[1] + '…'); },
@@ -469,7 +503,7 @@
       // used to always pin pikoci's, whatever environment was rolled back)
       const pl = getPipeline(e.pipeline.split('/')[1]);
       if (pl && pl.resources[0]) pl.resources[0].pinned = { ref: prev.version, actor: 'egon', reason: 'rollback of ' + env, at: Date.now() };
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'env.rollback', target: e.pipeline + ' ' + env, detail: `to ${prev.version} · pinned` });
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'env.rolled_back', target: e.pipeline + ' ' + env, detail: `to ${prev.version} · pinned` });
       toast(`Rolled back ${env} to ${prev.version} — resource pinned`); App.refresh();
     },
     solo() { D().soloMode = !D().soloMode; toast(D().soloMode ? 'Simulating a solo install — watch the nav' : 'Full install restored'); location.hash = '#/'; App.refresh(); },
@@ -480,13 +514,15 @@
     },
     noop() { toast('Not wired in the preview'); },
   };
+  // capture phase: in-row buttons stopPropagation() to suppress the row's
+  // onclick navigation — a bubble-phase listener here would never see them
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-act]');
     if (!el) return;
     e.preventDefault();
     const [fn, arg] = [el.getAttribute('data-act'), el.getAttribute('data-arg')];
     if (ACT[fn]) ACT[fn](arg);
-  });
+  }, true);
 
   // ---------- keyboard layer + palette -------------------------------------
   function paletteItems() {
@@ -657,7 +693,7 @@
     STATUS, RANK, st, bStatus, REASON, reasonLabel,
     esc, fmtDur, ago, bDur, lastOutputAge,
     team, setTeam, inTeam, lineages, lineagePl,
-    pipelines, getPipeline, getBuild, vmeta, jobBuilds, decisionFor, jobCell,
+    pipelines, getPipeline, getBuild, vmeta, jobBuilds, decisionFor, jobCell, isRunJob,
     primaryRef, primaryStatus, secondaryCounts, lineageHead, lineageStatus, mine, plHistory,
     testStats, testRuns, testHistory, isNewFailure, measurementDelta,
     compareWithLastGreen, attention, firstError, firstFailStep,

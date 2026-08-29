@@ -146,7 +146,7 @@
       body = `
       <div class="ctoolbar">
         <input data-filter aria-label="filter changes" placeholder="filter #, title, author, branch, repo…  ( / )" value="${esc(chgFilter)}" oninput="_chgF(this.value)">
-        ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● running')}${chip('held', '⛔ held')}${chip('drafts', 'drafts')}
+        ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● started')}${chip('held', '⛔ held')}${chip('drafts', 'drafts')}
         <label class="small mut"><input type="checkbox" ${chgBots ? 'checked' : ''} onchange="_chgB()"> bots</label>
         <span class="sp"></span>
         <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${P.team() ? ' in ' + esc(P.team()) : ''}</span>
@@ -198,7 +198,7 @@
           <td class="c-${worst} ${worst === 'started' ? 'pulse' : ''}">${st(worst).sym}</td>
           <td class="ct-title" title="${esc(v.meta.msg || '')}"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="shrink">${esc(v.meta.msg || '')}</span></div></td>
           <td class="mut nowrap">${esc(v.meta.author || '')}</td>
-          <td class="r nowrap"><span class="dots">${pl.jobs.filter(j => !j.cadence).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
+          <td class="r nowrap"><span class="dots">${pl.jobs.filter(P.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`;
       }).join('')}</tbody></table></div>`;
     } else if (tab === 'scheduled') {
@@ -207,7 +207,7 @@
         <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('trunk', 'Trunk')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
       body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
-        ${pl.resources[0].versions.concat([{ id: { ref: 'tick-208' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
+        ${pl.resources[0].versions.concat([{ id: { ref: new Date(D().now - 30 * 60e3).toISOString().slice(0, 16) + 'Z' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
           <td>⏱</td><td class="ct-title"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="mut shrink">cron.every-10m · oss/hello-world</span></div></td>
           <td></td><td class="r"><span class="dots">${VIEWS.jobDot(pl, 'gen', v.id.ref)}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`).join('')}
@@ -226,7 +226,7 @@
   // + dependencies in one artifact); the graph is a fold-out for deep DAGs.
   function prVerdict(l, pl, head, held) {
     const ref = head.id.ref;
-    const jobs = pl.jobs.filter(j => !j.cadence);
+    const jobs = pl.jobs.filter(P.isRunJob);
     const cells = jobs.map(j => ({ j, c: P.jobCell(pl, j.name, ref) }));
     if (held) return `<div class="verdict held">
       <div class="v-head">⛔ <b>Held — fork PR.</b> CI won't run with secrets until a maintainer releases it (pr_hold = "forks"); the forge shows "pending — awaiting maintainer".
@@ -288,7 +288,7 @@
         — every row below is scoped to this one commit</div>
       ${prVerdict(l, pl, head, held)}
       ${l.summary && !D().builds.some(b => b.pipeline === pl.name && Object.values(b.intent.versions)[0] === head.id.ref)
-        ? `<div class="tbl-scroll"><table class="tbl ctbl">${pl.jobs.filter(j => !j.cadence).map((j, i) => `<tr>
+        ? `<div class="tbl-scroll"><table class="tbl ctbl">${pl.jobs.filter(P.isRunJob).map((j, i) => `<tr>
             <td width="26">${VIEWS.dotStatic(l.summary[i] || 'none', j.name)}</td>
             <td><b>${esc(j.name)}</b></td>
             <td class="mut small r">${st(l.summary[i] || 'none').label}</td>
@@ -320,7 +320,7 @@
       for (const inp of j.inputs || []) for (const p of inp.passed || []) d = Math.max(d, jd(p) + 1);
       return (depth[name] = d);
     };
-    const jobs = pl.jobs.filter(j => !j.cadence);
+    const jobs = pl.jobs.filter(P.isRunJob);
     jobs.forEach(j => jd(j.name));
     const nodeW = 122, nodeH = 36, gapX = 56, gapY = 12, pad = 10;
     const maxD = Math.max(0, ...jobs.map(j => depth[j.name]));
@@ -353,7 +353,7 @@
       let timing, fill, click = '';
       if (c.kind === 'build') {
         const s = c.status;
-        timing = c.build.end ? fmtDur(bDur(c.build)) : (s === 'held' ? 'held' : c.build.status === 'pending' ? 'queued' : 'running');
+        timing = c.build.end ? fmtDur(bDur(c.build)) : (s === 'held' ? 'held' : c.build.status === 'pending' ? 'queued' : 'started');
         fill = st(s).color;
         click = `onclick="location.hash='#/b/${c.build.id}'"`;
       } else if (c.kind === 'decision') {
@@ -384,7 +384,7 @@
       for (const inp of j.inputs || []) for (const p of inp.passed || []) d = Math.max(d, jd(p) + 1);
       return (depth[name] = d);
     };
-    const jobs = pl.jobs.filter(j => !j.cadence);
+    const jobs = pl.jobs.filter(P.isRunJob);
     jobs.forEach(j => jd(j.name));
     jobs.sort((a, b) => depth[a.name] - depth[b.name] || a.name.localeCompare(b.name));
     const cells = jobs.map(j => ({ j, c: P.jobCell(pl, j.name, ref) }));
