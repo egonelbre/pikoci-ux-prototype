@@ -236,23 +236,23 @@
             : head.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span></td>
           <td class="mut small r nowrap">${ago(r.lastAt)}</td></tr>`;
       };
-      // groups render open — the roll-up line is for scanning, not gating;
-      // collapsing is the user's choice and sticks per mode (data-det)
-      const open = true;
+      // same display as Pipelines: ONE table, a tsub header row per repo
+      // (roll-up: worst status, counts, red branches named), branch rows under
+      const grp = x => `<tr class="tsub"><td colspan="6"><span class="c-${x.worst} ${x.worst === 'started' ? 'pulse' : ''}">${st(x.worst).sym}</span> <b>${esc(x.repo)}</b>
+          <span class="mut">· ${esc(x.team)} · ${x.g.length} branch${x.g.length === 1 ? '' : 'es'}${x.active !== x.g.length ? `, ${x.active} active` : ''}${x.red.length ? ` · <b class="c-failed">${x.red.length} red:</b> ${x.red.slice(0, 3).map(r => `<code>${esc(r.branch)}</code>`).join(' ')}${x.red.length > 3 ? ` +${x.red.length - 3}` : ''}` : ''} · ${ago(x.lastAt)}</span></td></tr>
+        ${x.sorted.slice(0, CAPB).map(brRow).join('')}
+        ${x.sorted.length > CAPB ? `<tr><td></td><td colspan="5" class="mut small">first ${CAPB} of ${x.sorted.length} branches — narrow with the filter</td></tr>` : ''}`;
       body = `<div class="ctoolbar">
           <input data-filter aria-label="filter repos and branches" placeholder="filter repo, branch…  ( / )" value="${esc(brFilter)}" oninput="_brF(this.value)">
           ${C('active', 'active')}${C('attention', '✕ needs attention')}${C('all', 'all')}
           <span class="sp"></span>
           <span class="mut small">${glist.length} repos · ${shownBranches} of ${rows.length} branches${!q && brChip === 'active' ? ' · quiet (no commit in 30d) hidden' : ''}</span>
         </div>
-        ${glist.map(x => `<details class="b2-det inline-det pkg" data-det="br:${brChip}${q ? ':q' : ''}:${esc(x.repo)}" ${open ? 'open' : ''}>
-          <summary><span class="c-${x.worst} ${x.worst === 'started' ? 'pulse' : ''}">${st(x.worst).sym}</span> <b>${esc(x.repo)}</b>
-            <span class="mut small">${esc(x.team)} · ${x.g.length} branch${x.g.length === 1 ? '' : 'es'}${x.active !== x.g.length ? `, ${x.active} active` : ''}${x.red.length ? ` · <b class="c-failed">${x.red.length} red:</b> ${x.red.slice(0, 3).map(r => `<code>${esc(r.branch)}</code>`).join(' ')}${x.red.length > 3 ? ` +${x.red.length - 3}` : ''}` : ''} · ${ago(x.lastAt)}</span></summary>
-          <div class="tbl-scroll"><table class="tbl ctbl fixed">
-          <colgroup><col style="width:30px"><col style="width:220px"><col><col style="width:110px"><col style="width:96px"><col style="width:84px"></colgroup>
-          ${x.sorted.slice(0, CAPB).map(brRow).join('')}</table></div>
-          ${x.sorted.length > CAPB ? `<div class="mut small pad-s">first ${CAPB} of ${x.sorted.length} branches — narrow with the filter</div>` : ''}
-        </details>`).join('') || '<div class="mut pad">Nothing matches. Clear the filter or switch chips.</div>'}
+        ${glist.length ? `<div class="tbl-scroll"><table class="tbl ctbl fixed">
+        <colgroup><col style="width:30px"><col style="width:220px"><col><col style="width:110px"><col style="width:96px"><col style="width:84px"></colgroup>
+        <thead><tr><th></th><th>branch</th><th>last commit</th><th>author</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
+        <tbody>${glist.map(grp).join('')}</tbody></table></div>`
+          : '<div class="mut pad">Nothing matches. Clear the filter or switch chips.</div>'}
         <p class="mut small">Every watched branch is its own pipeline (a git resource tracks one ref). Feature branches don't live here — they arrive as PRs.</p>`;
     } else if (tab === 'scheduled') {
       const pl = P.getPipeline('hello-world');
