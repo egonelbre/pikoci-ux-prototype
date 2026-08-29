@@ -164,7 +164,7 @@
     ]);
     if (o.stopAfterIntg) return;
     b('pikoci', 'build', n, 'succeeded', ref, ago - 290e3, 92, [S('git.pikoci', 'get', 'succeeded', 6, gitLog(ref)), S('compile', 'task', 'succeeded', 86, ['$ make build', 'go build -trimpath -o pikoci .', 'sha256: 4b7c9d21e8aa…', 'build: OK'])],
-      { artifacts: [{ name: 'pikoci-linux-amd64', size: '18.4 MB' }, { name: 'pikoci-darwin-arm64', size: '17.9 MB' }, { name: 'checksums.txt', size: '1 KB' }] });
+      { artifacts: [{ name: 'pikoci-linux-amd64', size: '18.4 MB', sha: '4b7c9d21' }, { name: 'pikoci-darwin-arm64', size: '17.9 MB', sha: '9e12f0aa' }, { name: 'checksums.txt', size: '1 KB' }] });
     b('pikoci', 'deploy', n, o.deploy || 'succeeded', ref, ago - 400e3, 34, [
       S('git.pikoci', 'get', 'succeeded', 5, gitLog(ref)),
       S('approval: deploy to production', 'approve', o.deploy === 'waiting_for_approval' ? 'pending' : 'succeeded', 0,
@@ -236,7 +236,10 @@
     { team: 'platform', res: 'git.infra', cause: { kind: 'manual', detail: 'manual by maria', runId: 'run-manual-42' }, queue: { matching: 0, busy: false, ahead: 0, tag: 'terraform' } });
 
   // --- oss/hello-world: cron ---
-  for (let i = 0; i < 3; i++) {
+  // ticks 210, 209, 207 built; tick-208 deliberately has NO build so its
+  // overlap-skipped decision record is what renders (a build at the same
+  // ref would shadow the decision in jobCell)
+  for (const i of [0, 1, 3]) {
     b('hello-world', 'gen', 210 - i, 'succeeded', 'tick-' + (210 - i), (10 + i * 10) * min, 2,
       [S('cron.every-10m', 'get', 'succeeded', 0, ['version: tick-' + (210 - i)]), S('echo', 'task', 'succeeded', 1, ['$ echo IN', 'IN'])],
       { team: 'oss', res: 'cron.every-10m', cause: { kind: 'cron', detail: 'tick', runId: 'run-tick-' + (210 - i) } });
@@ -548,12 +551,15 @@
       for (const j of jobs) {
         const status = ri === 0 && j.name === 'sec-scan' ? 'warning' : 'succeeded';
         const dur = durFor(j.name);
+        const arts = j.name.startsWith('push--')
+          ? [{ name: 'image digest', size: '—', sha: r.ref === 'e4d5c6b' ? 'c1a9e77d' : '5d20b3f1', dest: `ghcr.io/pikoci/pikoci:${ri === 0 ? '0.9.5-rc2' : '0.9.5-rc1'}-${j.name.slice(6)}` }]
+          : j.name === 'signing' ? [{ name: 'cosign bundle', size: '4 KB', sha: '77ab01ce' }] : null;
         b('delivery', j.name, 8 - ri, status, r.ref, base - layerStart[depth[j.name]] * 1e3, dur,
           [S(res, 'get', 'succeeded', 5, ['ref: ' + r.ref]),
            S(j.name, 'task', status, dur - 5, status === 'warning'
              ? ['$ make sec-scan', 'WARN: 2 medium CVEs in base image (allowlisted until 0.9.6)', 'exit 0 (warning)']
              : ['$ make ' + j.name.replace(/--.*/, ''), 'OK'])],
-          { res, cause: { kind: 'version', detail: res + ' ' + r.ref, runId: 'run-' + r.ref }, configRev: 6 });
+          { res, cause: { kind: 'version', detail: res + ' ' + r.ref, runId: 'run-' + r.ref }, configRev: 6, artifacts: arts });
       }
     });
   })();

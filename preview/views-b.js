@@ -233,7 +233,10 @@
     const ref = Object.values(b.intent.versions)[0];
     const vm = P.vmeta(pl, ref);
     const failIdx = P.firstFailStep(b);
-    const cmp = ['failed', 'succeeded', 'warning'].includes(b.status) ? P.compareWithLastGreen(b) : null;
+    // waiting builds included: the approval card's "diff since last deploy"
+    // link needs a cmpbox to reveal (it used to point at nothing)
+    const cmp = ['failed', 'succeeded', 'warning', 'waiting_for_approval'].includes(b.status) ? P.compareWithLastGreen(b) : null;
+    const cmpHidden = b.status === 'waiting_for_approval';
     const history = P.jobBuilds(pl, b.job).slice(0, 8);
     const stall = P.lastOutputAge(b);
     const j = pl.jobs.find(x => x.name === b.job);
@@ -339,7 +342,7 @@
             <pre class="log excerpt">${b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error /.test(l)).slice(0, 4).map(l => `<span class="l-err">${esc(l)}</span>`).join('\n')}</pre>
           </div>` : ''}
 
-          ${cmp ? `<div class="cmp" id="cmpbox">
+          ${cmp ? `<div class="cmp" id="cmpbox" ${cmpHidden ? `hidden data-fold="cmp:${b.id}"` : ''}>
             <b>Compare with last green</b> <span class="mut small">(#${cmp.green.n}, ${ago(cmp.green.start)})</span>
             ${cmp.diffs.length ? cmp.diffs.map(d => `<div class="small">· ${esc(d.res)}: <code>${esc(d.from)}</code> → <code>${esc(d.to)}</code>
               ${d.toMeta.msg ? `— "${esc(d.toMeta.msg)}" (${esc(d.toMeta.author || '')})` : ''}</div>`).join('')
@@ -366,6 +369,15 @@
             </div>
           </div>`).join('')}
           </div>
+          ${b.artifacts && b.artifacts.length ? `<h3>Outputs</h3>
+          <div class="tbl-scroll"><table class="tbl ctbl wtbl">
+          ${b.artifacts.map(a => `<tr>
+            <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a></td>
+            <td class="mut small nowrap">${esc(a.size)}</td>
+            <td class="mut small nowrap">${a.sha ? `sha256 <code>${esc(a.sha)}…</code>` : ''}</td>
+            <td class="mut small">${a.dest ? `→ ${esc(a.dest)}` : '<span class="mut">worker-local · retention pending</span>'}</td>
+          </tr>`).join('')}
+          </table></div>` : ''}
         </main>
       </div>
     </div>`;

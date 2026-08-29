@@ -433,9 +433,11 @@
       if (!window.confirm(`Rollback ${env} to ${prev.version}?\n\nThis triggers deploy with version ${prev.version} and pins the resource so the scheduler doesn't roll forward. Audited.`)) return;
       e.version = prev.version; e.deployedAt = Date.now(); e.byBuild = 'rollback'; e.verified = true;
       e.history.unshift({ version: prev.version, at: Date.now(), build: 'rollback', ok: true });
-      const pl = getPipeline('pikoci');
-      pl.resources[0].pinned = { ref: prev.version, actor: 'egon', reason: 'rollback of prod', at: Date.now() };
-      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'env.rollback', target: env, detail: `to ${prev.version} · pinned` });
+      // pin the resource of the environment's OWN pipeline (audit fix: this
+      // used to always pin pikoci's, whatever environment was rolled back)
+      const pl = getPipeline(e.pipeline.split('/')[1]);
+      if (pl && pl.resources[0]) pl.resources[0].pinned = { ref: prev.version, actor: 'egon', reason: 'rollback of ' + env, at: Date.now() };
+      D().audit.unshift({ at: Date.now(), user: 'egon', action: 'env.rollback', target: e.pipeline + ' ' + env, detail: `to ${prev.version} · pinned` });
       toast(`Rolled back ${env} to ${prev.version} — resource pinned`); App.refresh();
     },
     solo() { D().soloMode = !D().soloMode; toast(D().soloMode ? 'Simulating a solo install — watch the nav' : 'Full install restored'); location.hash = '#/'; App.refresh(); },
