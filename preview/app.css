@@ -147,6 +147,13 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .ctt .row-link, .ctt .shrink { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trunc-code { display: inline-block; max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .you-mark { color: var(--accent); font-size: 12px; }
+/* per-test history dots (K23) */
+.th-hist { display: inline-flex; gap: 3px; align-items: center; }
+.th-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.th-dot.pass { background: var(--ok); }
+.th-dot.fail { background: var(--bad); }
+.th-dot.skip { background: var(--pend); }
+.th-dot.none { width: auto; color: var(--faint-t); }
 .mine-row td:first-child { box-shadow: inset 3px 0 var(--accent); }
 /* PR detail: graph + checks side by side, wrapping when narrow */
 .pr-cols { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; margin-bottom: 12px; }

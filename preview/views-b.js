@@ -363,6 +363,8 @@
             <pre class="log excerpt">${b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error /.test(l)).slice(0, 4).map(l => `<span class="l-err">${esc(l)}</span>`).join('\n')}</pre>
           </div>` : ''}
 
+          ${VIEWS.testSection(pl, b)}
+
           ${cmp ? `<div class="cmp" id="cmpbox" ${cmpHidden ? `hidden data-fold="cmp:${b.id}"` : ''}>
             <b>Compare with last green</b> <span class="mut small">(#${cmp.green.n}, ${ago(cmp.green.start)})</span>
             ${cmp.diffs.length ? cmp.diffs.map(d => `<div class="small">· ${esc(d.res)}: <code>${esc(d.from)}</code> → <code>${esc(d.to)}</code>
@@ -402,6 +404,61 @@
         </main>
       </div>
     </div>`;
+  };
+
+  // ---------- structured checks + measurements on the build page ------------
+  // Tests as objects, not grepped log lines (G2): stable ids give per-test
+  // history and the new-vs-known split; benchmarks are measurements with
+  // generic deltas; a broken report degrades honestly to logs (G5).
+  VIEWS.testSection = function (pl, b) {
+    let out = '';
+    if (b.testReportError) {
+      out += `<div class="warnbox">⚠ <b>Test report not ingested</b> — ${esc(b.testReportError)}</div>`;
+    }
+    if (b.tests) {
+      const stats = P.testStats(b);
+      const failed = b.tests.filter(t => t.s === 'fail');
+      const skipped = b.tests.filter(t => t.s === 'skip');
+      const histDot = h => h.s === null
+        ? '<span class="th-dot none" title="no report in that run">·</span>'
+        : `<a class="th-dot ${h.s}" href="#/b/${h.b.id}" title="#${h.b.n}: ${h.s}"></a>`;
+      out += `<h3>Tests <span class="mut small">— ${stats.pass} passed${stats.fail ? ` · <b class="c-failed">${stats.fail} failed</b>` : ''}${stats.skip ? ` · ${stats.skip} skipped` : ''} · ${fmtDur(stats.dur)} test time</span></h3>`;
+      if (failed.length) out += `<div class="tbl-scroll"><table class="tbl ctbl wtbl">
+        ${failed.map(t => {
+        const isNew = P.isNewFailure(pl, b.job, b, t.id);
+        const hist = P.testHistory(pl, b.job, b, t.id);
+        return `<tr>
+          <td class="c-failed nowrap">✕</td>
+          <td class="nowrap"><code>${esc(t.id)}</code>
+            ${isNew ? '<span class="chip mine-chip" title="passed in every earlier run with a report">new</span>'
+            : '<span class="chip" title="also failed in an earlier run">still failing</span>'}</td>
+          <td class="mut small">${esc(t.msg || '')}</td>
+          <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td>
+          <td class="r nowrap"><span class="th-hist" title="this test across the last runs with reports">${hist.map(histDot).join('')}</span></td>
+        </tr>`;
+      }).join('')}</table></div>`;
+      if (skipped.length) out += skipped.map(t => `<div class="mut small pad-s">◇ <code>${esc(t.id)}</code> skipped${t.msg ? ` — ${esc(t.msg)}` : ''}</div>`).join('');
+      out += `<details class="b2-det inline-det" data-det="tests:${b.id}"><summary>${stats.pass} passing tests</summary>
+        <div class="tbl-scroll"><table class="tbl ctbl wtbl">${b.tests.filter(t => t.s === 'pass').map(t => `<tr>
+          <td class="c-succeeded nowrap">✓</td><td class="nowrap"><code>${esc(t.id)}</code></td>
+          <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div></details>`;
+    }
+    if (b.measurements) {
+      out += `<h3>Measurements <span class="mut small">— values, not verdicts; deltas are vs this job's last green run</span></h3>
+      <div class="tbl-scroll"><table class="tbl ctbl wtbl">
+      ${b.measurements.map(m => {
+        const d = P.measurementDelta(pl, b, m);
+        const worse = d && (m.better === 'lower' ? d.pct > 0 : d.pct < 0);
+        const sig = d && Math.abs(d.pct) >= 2;
+        return `<tr>
+          <td class="nowrap"><code>${esc(m.id)}</code></td>
+          <td class="r nowrap"><b>${m.value}</b> <span class="mut small">${esc(m.unit)}</span></td>
+          <td class="mut small nowrap">${d ? `was ${d.prev} ${esc(m.unit)}` : ''}</td>
+          <td class="r nowrap ${sig ? (worse ? 'c-failed' : 'c-succeeded') : 'mut'}">${d ? `${d.pct >= 0 ? '+' : ''}${d.pct.toFixed(1)}%${sig ? (worse ? ' ▲' : ' ▼') : ''}` : '<span class="mut small">no baseline</span>'}</td>
+        </tr>`;
+      }).join('')}</table></div>`;
+    }
+    return out;
   };
 
   // ---------- Ops / Audit / Teams / Settings --------------------------------

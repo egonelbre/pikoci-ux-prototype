@@ -245,6 +245,7 @@
           <a class="btn sm" href="#/b/${b.id}">Full log</a>
           <button class="btn sm primary" data-act="retry" data-arg="${b.id}">↻ Retry</button></div>
         ${errLines.length ? `<pre class="log excerpt">${errLines.slice(0, 3).map(x => `<span class="l-err">${esc(x)}</span>`).join('\n')}</pre>` : ''}
+        ${b.tests ? (() => { const ts = P.testStats(b); const nw = b.tests.filter(t => t.s === 'fail' && P.isNewFailure(pl, b.job, b, t.id)).length; return `<div class="small">tests: ${ts.pass} passed · <b class="c-failed">${ts.fail} failed</b>${nw ? ` <b class="c-failed">(${nw} new)</b>` : ' (all known)'} — <a href="#/b/${b.id}">details</a></div>`; })() : ''}
         <div class="mut small">${blocked.length ? `<b>${blocked.join(', ')}</b> won't start until it passes · ` : ''}${cmp ? (cmp.diffs.length
           ? `since last green (#${cmp.green.n}, ${ago(cmp.green.start)}): ${cmp.diffs.map(d => `<code>${esc(d.from)}</code>→<code>${esc(d.to)}</code>${d.toMeta.msg ? ` — "${esc(d.toMeta.msg)}"` : ''}`).join(' · ')}`
           : 'same input versions as last green — suspect environment or flake, not this change') : 'no earlier green run of this job to compare against'}</div>
