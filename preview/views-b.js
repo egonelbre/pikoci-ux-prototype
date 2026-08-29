@@ -73,7 +73,7 @@
       const s = cell.status;
       const j = pl.jobs.find(j => j.name === nm);
       const sub = cell.kind === 'build'
-        ? `#${cell.build.n} · ${cell.build.end ? fmtDur(bDur(cell.build)) : st(s).label}`
+        ? `#${cell.build.n} · ${cell.build.end ? fmtDur(bDur(cell.build)) : st(s).label}${cell.build.artifacts ? ' · 📦' : ''}`
         : cell.kind === 'decision' ? reasonLabel(cell.decision) : 'no build';
       const fill = cell.kind === 'build' ? st(s).color : 'var(--mut3)';
       const g = `<g class="gnode ${s === 'started' ? 'pulse' : ''}">
@@ -100,7 +100,28 @@
       .concat((res.versions || []).slice(0, 4).map(v =>
         `<a class="commit-chip ${ctx === v.id.ref ? 'on' : ''}" href="#/p/${name}/${view}/${v.id.ref}" title="${esc(v.meta.msg || '')}">${esc(v.id.ref)}</a>`));
     let body = '';
-    if (view === 'graph') body = graphSVG(pl, ctx || null);
+    if (view === 'graph') {
+      body = graphSVG(pl, ctx || null);
+      // outputs of the builds this graph is showing (same per-node selection:
+      // the chosen context, or each job's latest build on primary-latest)
+      const outs = [];
+      for (const j of pl.jobs) {
+        let bb = null;
+        if (ctx) { const c = P.jobCell(pl, j.name, ctx); bb = c.kind === 'build' ? c.build : null; }
+        else bb = P.jobBuilds(pl, j.name)[0] || null;
+        if (bb && bb.artifacts) for (const a of bb.artifacts) outs.push({ a, b: bb });
+      }
+      if (outs.length) body += `<h3>Outputs <span class="mut small">— produced by ${ctx ? `<code>${esc(ctx)}</code>` : 'the builds shown'}</span></h3>
+        <div class="tbl-scroll"><table class="tbl ctbl wtbl">
+        ${outs.map(({ a, b: ab }) => `<tr>
+          <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a></td>
+          <td class="mut small nowrap">${esc(a.size)}</td>
+          <td class="mut small nowrap">${a.sha ? `sha256 <code>${esc(a.sha)}…</code>` : ''}</td>
+          <td class="mut small">${a.dest ? `→ ${esc(a.dest)}` : '<span class="mut">worker-local · retention pending</span>'}</td>
+          <td class="mut small r nowrap">from <a href="#/b/${ab.id}">${esc(ab.job)} #${ab.n}</a></td>
+        </tr>`).join('')}
+        </table></div>`;
+    }
     else if (view === 'versions') {
       body = `<div class="tbl-scroll"><table class="tbl">${(res.versions || []).map(v => {
         return `<tr><td width="20">${res.pinned && res.pinned.ref === v.id.ref ? '📌' : ''}</td>
