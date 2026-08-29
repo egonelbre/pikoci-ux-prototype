@@ -76,6 +76,23 @@
   // job" is simply one whose only trigger is a cron resource
   const cronTrigger = j => (j.inputs || []).find(i => i.trigger && /^cron\./.test(i.res));
   const isRunJob = j => (j.inputs || []).some(i => i.trigger && !/^cron\./.test(i.res));
+  // one index over every watched branch: rich branch-kind pipelines + the
+  // summary-only mass (DATA.branches) — what a server-side branch-index
+  // endpoint would return, team-scoped
+  function branchIndex() {
+    const real = pipelines().filter(pl => pl.primaryContext.kind === 'branch').map(pl => {
+      const lbl = pl.primaryContext.label;
+      const r = pl.resources.find(x => x.name === pl.primaryContext.resource);
+      const v = r && r.versions[0];
+      return {
+        name: pl.name, team: pl.team, pl,
+        repo: pl.name.endsWith('-' + lbl) ? pl.name.slice(0, -lbl.length - 1) : pl.name,
+        branch: lbl, status: primaryStatus(pl), lastAt: v ? (v.meta.at || 0) : 0,
+        headRef: v ? v.id.ref : null, headMsg: v ? (v.meta.msg || '') : '', headAuthor: v ? (v.meta.author || '') : '',
+      };
+    });
+    return real.concat(D().branches.filter(x => !team() || x.team === team()));
+  }
   const vmeta = (pl, ref) => {
     for (const r of pl.resources) {
       const v = (r.versions || []).find(v => v.id.ref === ref);
@@ -693,7 +710,7 @@
     STATUS, RANK, st, bStatus, REASON, reasonLabel,
     esc, fmtDur, ago, bDur, lastOutputAge,
     team, setTeam, inTeam, lineages, lineagePl,
-    pipelines, getPipeline, getBuild, vmeta, jobBuilds, decisionFor, jobCell, isRunJob,
+    pipelines, getPipeline, getBuild, vmeta, jobBuilds, decisionFor, jobCell, isRunJob, branchIndex,
     primaryRef, primaryStatus, secondaryCounts, lineageHead, lineageStatus, mine, plHistory,
     testStats, testRuns, testHistory, isNewFailure, measurementDelta,
     compareWithLastGreen, attention, firstError, firstFailStep,
