@@ -163,7 +163,7 @@
         const old = l.changes.filter(c => c.superseded).length;
         return `<tr class="${P.mine(l) ? 'mine-row' : ''}" onclick="location.hash='#/changes/pr/${l.n}'">
           <td class="c-${isHeld ? 'held' : s} ${s === 'started' ? 'pulse' : ''}">${isHeld ? '⛔' : st(s).sym}</td>
-          <td class="ct-title"><a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
+          <td class="ct-title" title="${esc(l.title)}"><a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
             ${l.draft ? '<span class="chip">draft</span>' : ''}${l.fork ? '<span class="chip">fork</span>' : ''}
             ${isHeld ? '<span class="badge held-badge">held</span>' : ''}
             ${P.mine(l) ? '<span class="chip mine-chip">yours</span>' : ''}
