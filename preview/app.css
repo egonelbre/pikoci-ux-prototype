@@ -130,13 +130,21 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .ctbl tbody tr { cursor: pointer; }
 .ctbl tbody tr:hover td { background: var(--bg2); }
 .ctbl .dots { gap: 3px; }
-/* the title column is the flexible one: it absorbs leftover width and
-   truncates first, so the table fits its container instead of scrolling */
-.ct-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ctbl .ct-title { width: 100%; max-width: 0; min-width: 16ch; }
+/* column auto-sizing: nowrap columns pin to their content (width:1px is a
+   floor the content pushes open), and the title column — the only
+   unconstrained one — absorbs all leftover width. Truncation happens in
+   the inner .ctt flex wrapper, never on the td (a max-width:0 td zeroes
+   the column's max-content and Chrome hands the surplus to everyone else). */
+.ct-title { overflow: hidden; max-width: 0; min-width: 18ch; width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.ctbl td.nowrap { width: 1px; }
+/* deterministic sizing where auto-layout misbehaves: fixed layout + colgroup;
+   every fixed column hugs its content, the bare <col> (title) takes the rest */
+.tbl.fixed { table-layout: fixed; }
+.tbl.fixed td { overflow: hidden; }
+.ctbl .ct-title { max-width: none; width: auto; }
 .ctt { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .ctt > * { flex: none; }
-.ctt .row-link { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctt .row-link, .ctt .shrink { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trunc-code { display: inline-block; max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .you-mark { color: var(--accent); font-size: 12px; }
 .mine-row td:first-child { box-shadow: inset 3px 0 var(--accent); }

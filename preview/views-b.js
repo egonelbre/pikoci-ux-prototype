@@ -210,8 +210,8 @@
       const lastAt = lastB ? lastB.start : (lastLin ? lastLin.updated : (pl.resources[0].versions[0] || { meta: {} }).meta.at);
       return `<tr onclick="location.hash='#/p/${pl.name}/graph'">
         <td class="c-${s} ${s === 'started' ? 'pulse' : ''}">${pr ? '⇅' : st(s).sym}</td>
-        <td class="ct-title" title="${esc(pl.desc)}"><b>${esc(pl.team)}/${esc(pl.name)}</b>
-          ${pl.public ? '<span class="chip">public</span>' : ''}</td>
+        <td class="ct-title" title="${esc(pl.desc)}"><div class="ctt"><b>${esc(pl.team)}/${esc(pl.name)}</b>
+          ${pl.public ? '<span class="chip">public</span>' : ''}<span class="mut small shrink">— ${esc(pl.desc)}</span></div></td>
         <td class="mut small nowrap">${pl.paused ? '❚❚ paused' : pr
           ? `${counts.total} open PR${counts.total === 1 ? '' : 's'}${counts.failing ? ` · <b class="c-failed">${counts.failing} ✕</b>` : ''}${counts.held ? ` · ${counts.held} ⛔` : ''}`
           : esc(pl.primaryContext.label)}</td>
@@ -427,7 +427,7 @@
       <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th>why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
       ${pend.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-pending">⏳</td>
-        <td class="ct-title"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
+        <td class="ct-title"><div class="ctt"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></div></td>
         <td><code>${esc(b.queue.tag)}</code></td>
         <td class="${b.queue.matching === 0 && !poolFor(b.queue.tag) ? 'c-failed' : 'mut'} small">${b.queue.matching === 0
           ? (poolFor(b.queue.tag)
@@ -452,7 +452,7 @@
       ${running.length ? `<div class="tbl-scroll"><table class="tbl ctbl">
       ${running.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-started pulse">●</td>
-        <td class="ct-title"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
+        <td class="ct-title"><div class="ctt"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></div></td>
         <td class="mut small">on <b>${esc(b.worker)}</b></td>
         <td class="mut small r nowrap" data-live>${fmtDur(bDur(b))}</td>
       </tr>`).join('')}</table></div>` : '<div class="mut pad-s small">nothing running right now</div>'}

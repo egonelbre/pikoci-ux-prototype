@@ -151,7 +151,8 @@
         <span class="sp"></span>
         <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${P.team() ? ' in ' + esc(P.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl">
+      <div class="tbl-scroll"><table class="tbl ctbl fixed">
+        <colgroup><col style="width:30px"><col><col style="width:92px"><col style="width:114px"><col style="width:188px"><col style="width:132px"><col style="width:84px"></colgroup>
         <thead><tr><th></th><th>PR</th><th>repo</th><th>author</th><th>branch @ head</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
         <tbody>
         ${shown.map(l => {
@@ -195,7 +196,7 @@
         }
         return `<tr>
           <td class="c-${worst} ${worst === 'started' ? 'pulse' : ''}">${st(worst).sym}</td>
-          <td class="ct-title"><code>${esc(v.id.ref)}</code> ${esc(v.meta.msg || '')}</td>
+          <td class="ct-title" title="${esc(v.meta.msg || '')}"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="shrink">${esc(v.meta.msg || '')}</span></div></td>
           <td class="mut nowrap">${esc(v.meta.author || '')}</td>
           <td class="r nowrap"><span class="dots">${pl.jobs.filter(j => !j.cadence).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`;
@@ -207,7 +208,7 @@
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
       body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
         ${pl.resources[0].versions.concat([{ id: { ref: 'tick-208' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
-          <td>⏱</td><td class="ct-title"><code>${esc(v.id.ref)}</code> <span class="mut">cron.every-10m · oss/hello-world</span></td>
+          <td>⏱</td><td class="ct-title"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="mut shrink">cron.every-10m · oss/hello-world</span></div></td>
           <td></td><td class="r"><span class="dots">${VIEWS.jobDot(pl, 'gen', v.id.ref)}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`).join('')}
       </tbody></table></div>`;
@@ -472,8 +473,8 @@
     const chip = (k, lbl) => `<button class="chip-btn ${envChip === k ? 'on' : ''}" onclick="_envC('${k}')">${lbl}</button>`;
     const row = e => `<tr onclick="location.hash='#/environments/${encodeURIComponent(e.name)}'">
           <td>${e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>'}</td>
-          <td class="ct-title"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
-            ${e.drift ? '<span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : '<span class="chip">verifying…</span>'}</td>
+          <td class="ct-title"><div class="ctt"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
+            ${e.drift ? '<span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : '<span class="chip">verifying…</span>'}</div></td>
           <td class="mut small nowrap">${esc(e.pipeline)} · ${esc(e.job)}</td>
           <td><code>${esc(e.version)}</code></td>
           <td class="mut small nowrap">${ago(e.deployedAt)} · ${esc(e.byBuild)} (${esc(e.by)})</td>
