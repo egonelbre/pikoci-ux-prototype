@@ -438,10 +438,36 @@
         </tr>`;
       }).join('')}</table></div>`;
       if (skipped.length) out += skipped.map(t => `<div class="mut small pad-s">◇ <code>${esc(t.id)}</code> skipped${t.msg ? ` — ${esc(t.msg)}` : ''}</div>`).join('');
-      out += `<details class="b2-det inline-det" data-det="tests:${b.id}"><summary>${stats.pass} passing tests</summary>
-        <div class="tbl-scroll"><table class="tbl ctbl wtbl">${b.tests.filter(t => t.s === 'pass').map(t => `<tr>
-          <td class="c-succeeded nowrap">✓</td><td class="nowrap"><code>${esc(t.id)}</code></td>
-          <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div></details>`;
+      // scale: suites run to 8000 tests across 100 packages. Failures stay a
+      // flat list (the rare set); everything else rolls up per package,
+      // slowest first, expanding one package at a time; the filter finds a
+      // single test by name across the whole suite.
+      const q = (window._tq || '').toLowerCase();
+      out += `<div class="ctoolbar gap-s"><input aria-label="find a test" placeholder="find a test by name…" value="${esc(window._tq || '')}"
+        oninput="window._tq=this.value;P.App.refresh();const f=[...document.querySelectorAll('input[aria-label=&quot;find a test&quot;]')][0];if(f){f.focus();f.setSelectionRange(999,999)}">
+        <span class="sp"></span><span class="mut small">${b.tests.length} tests</span></div>`;
+      if (q) {
+        const hits = b.tests.filter(t => t.id.toLowerCase().includes(q));
+        out += hits.length ? `<div class="tbl-scroll"><table class="tbl ctbl wtbl">${hits.slice(0, 100).map(t => `<tr>
+            <td class="c-${t.s === 'fail' ? 'failed' : t.s === 'skip' ? 'pending' : 'succeeded'} nowrap">${t.s === 'fail' ? '✕' : t.s === 'skip' ? '◇' : '✓'}</td>
+            <td class="nowrap"><code>${esc(t.id)}</code></td>
+            <td class="mut small">${esc(t.msg || '')}</td>
+            <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div>${hits.length > 100 ? `<div class="mut small pad-s">first 100 of ${hits.length} matches</div>` : ''}`
+          : '<div class="mut pad-s small">no test matches</div>';
+      } else {
+        const pkgs = {};
+        for (const t of b.tests.filter(t => t.s === 'pass')) {
+          const p = t.id.split('/')[0];
+          (pkgs[p] = pkgs[p] || { n: 0, dur: 0, tests: [] });
+          pkgs[p].n++; pkgs[p].dur += t.d || 0; pkgs[p].tests.push(t);
+        }
+        out += Object.entries(pkgs).sort((a, c) => c[1].dur - a[1].dur).map(([p, g]) =>
+          `<details class="b2-det inline-det pkg" data-det="tp:${b.id}:${esc(p)}"><summary><code>${esc(p)}</code>
+            <span class="mut small">${g.n} ✓ · ${fmtDur(g.dur)}</span></summary>
+          <div class="tbl-scroll"><table class="tbl ctbl wtbl">${g.tests.sort((a, c) => (c.d || 0) - (a.d || 0)).map(t => `<tr>
+            <td class="c-succeeded nowrap">✓</td><td class="nowrap"><code>${esc(t.id)}</code></td>
+            <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div></details>`).join('');
+      }
     }
     if (b.measurements) {
       out += `<h3>Measurements <span class="mut small">— values, not verdicts; deltas are vs this job's last green run</span></h3>

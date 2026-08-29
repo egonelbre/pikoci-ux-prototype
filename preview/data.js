@@ -204,7 +204,7 @@
   // {id, s: pass|fail|skip, d: seconds, msg?}. Stable ids are what make
   // history, flake detection and new-vs-known possible; richer shapes stay
   // artifacts. unitTests(overrides) builds the suite for a run.
-  const unitTests = o => Object.assign({
+  const unitBase = {
     'scheduler/TestSchedulerRace': { s: 'pass', d: 2.2 },
     'scheduler/TestPinRetrigger': { s: 'pass', d: 0.4 },
     'scheduler/TestTickJitter': { s: 'pass', d: 0.9 },
@@ -213,7 +213,19 @@
     'resource/TestGitShallowClone': { s: 'pass', d: 5.8 },
     'hcl/TestParseRemain': { s: 'pass', d: 0.1 },
     'notif/TestMatrixEscaping': { s: 'skip', d: 0, msg: 'quarantined: flaky on CI since #188 — see B3' },
-  }, o || {});
+  };
+  const unitTests = o => Object.assign({}, unitBase, o || {});
+  // filler: real suites run thousands of tests across many packages — enough
+  // here to exercise the package roll-up (~50 tests, 10 packages)
+  (function () {
+    const pkgs = ['api', 'storage', 'cli', 'audit', 'secret', 'transport', 'pipeline', 'version'];
+    const kinds = ['Parse', 'Roundtrip', 'Validate', 'Migrate', 'List', 'Auth'];
+    let k = 0;
+    for (const p of pkgs) for (let i = 0; i < 5 + (k % 3); i++) {
+      unitBase[p + '/Test' + kinds[(k + i) % kinds.length] + (i || '')] = { s: 'pass', d: +((k * 13 + i * 7) % 40 / 10 + 0.05).toFixed(2) };
+      k++;
+    }
+  })();
   const T = m => Object.entries(m).map(([id, t]) => Object.assign({ id }, t));
 
   // #472 draft: cheap tier ran 2d ago
