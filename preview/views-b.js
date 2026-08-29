@@ -422,7 +422,7 @@
       const histDot = h => h.s === null
         ? '<span class="th-dot none" title="no report in that run">·</span>'
         : `<a class="th-dot ${h.s}" href="#/b/${h.b.id}" title="#${h.b.n}: ${h.s}"></a>`;
-      out += `<h3>Tests <span class="mut small">— ${stats.pass} passed${stats.fail ? ` · <b class="c-failed">${stats.fail} failed</b>` : ''}${stats.skip ? ` · ${stats.skip} skipped` : ''} · ${fmtDur(stats.dur)} test time</span></h3>`;
+      out += `<h3>Checks <span class="mut small">— ${stats.pass} passed${stats.fail ? ` · <b class="c-failed">${stats.fail} failed</b>` : ''}${stats.skip ? ` · ${stats.skip} skipped` : ''} · ${fmtDur(stats.dur)} test time</span></h3>`;
       if (failed.length) out += `<div class="tbl-scroll"><table class="tbl ctbl wtbl">
         ${failed.map(t => {
         const isNew = P.isNewFailure(pl, b.job, b, t.id);
@@ -448,7 +448,9 @@
         <span class="sp"></span><span class="mut small">${b.tests.length} tests</span></div>`;
       if (q) {
         const hits = b.tests.filter(t => t.id.toLowerCase().includes(q));
-        out += hits.length ? `<div class="tbl-scroll"><table class="tbl ctbl wtbl">${hits.slice(0, 100).map(t => `<tr>
+        out += hits.length ? `<div class="tbl-scroll"><table class="tbl ctbl fixed">
+          <colgroup><col style="width:28px"><col style="width:340px"><col><col style="width:76px"></colgroup>
+          ${hits.slice(0, 100).map(t => `<tr>
             <td class="c-${t.s === 'fail' ? 'failed' : t.s === 'skip' ? 'pending' : 'succeeded'} nowrap">${t.s === 'fail' ? '✕' : t.s === 'skip' ? '◇' : '✓'}</td>
             <td class="nowrap"><code>${esc(t.id)}</code></td>
             <td class="mut small">${esc(t.msg || '')}</td>
@@ -464,7 +466,9 @@
         out += Object.entries(pkgs).sort((a, c) => c[1].dur - a[1].dur).map(([p, g]) =>
           `<details class="b2-det inline-det pkg" data-det="tp:${b.id}:${esc(p)}"><summary><code>${esc(p)}</code>
             <span class="mut small">${g.n} ✓ · ${fmtDur(g.dur)}</span></summary>
-          <div class="tbl-scroll"><table class="tbl ctbl wtbl">${g.tests.sort((a, c) => (c.d || 0) - (a.d || 0)).map(t => `<tr>
+          <div class="tbl-scroll"><table class="tbl ctbl fixed">
+          <colgroup><col style="width:28px"><col><col style="width:76px"></colgroup>
+          ${g.tests.sort((a, c) => (c.d || 0) - (a.d || 0)).map(t => `<tr>
             <td class="c-succeeded nowrap">✓</td><td class="nowrap"><code>${esc(t.id)}</code></td>
             <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div></details>`).join('');
       }

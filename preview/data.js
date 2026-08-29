@@ -229,7 +229,18 @@
   const T = m => Object.entries(m).map(([id, t]) => Object.assign({ id }, t));
 
   // #472 draft: cheap tier ran 2d ago
-  prBuild('lint', 201, 'failed', 'd4a11f0', 2 * day, 44, [S('git.pikoci-pr', 'get', 'succeeded', 6, gitLog('d4a11f0')), S('lint', 'task', 'failed', 38, ['$ make lint', 'pikoci/resource/put.go:88: unreachable code', 'ERROR: vet failed', 'make: *** [lint] Error 1'])]);
+  // lint findings ride the same K23 contract: each finding is a failed check
+  // (id = linter/rule@file for cross-run stability, line lives in the message);
+  // each clean linter is one passing check, so greens roll up like packages
+  prBuild('lint', 201, 'failed', 'd4a11f0', 2 * day, 44, [S('git.pikoci-pr', 'get', 'succeeded', 6, gitLog('d4a11f0')), S('lint', 'task', 'failed', 38, ['$ make lint', 'pikoci/resource/put.go:88: unreachable code', 'ERROR: vet failed', 'make: *** [lint] Error 1'])],
+    { tests: [
+      { id: 'govet/unreachable@resource/put.go', s: 'fail', d: 0, msg: 'put.go:88: unreachable code' },
+      { id: 'staticcheck/SA4006@scheduler/tick.go', s: 'fail', d: 0, msg: 'tick.go:141: value assigned to `next` is never used' },
+      { id: 'errcheck@resource/put.go', s: 'fail', d: 0, msg: 'put.go:92: error return value of `w.Close` is not checked' },
+      { id: 'gofmt', s: 'pass', d: 0.8 }, { id: 'govet', s: 'pass', d: 3.1 },
+      { id: 'staticcheck', s: 'pass', d: 11.2 }, { id: 'errcheck', s: 'pass', d: 4.5 },
+      { id: 'ineffassign', s: 'pass', d: 1.9 }, { id: 'misspell', s: 'pass', d: 0.6 },
+    ] });
   prBuild('test-unit', 198, 'succeeded', 'd4a11f0', 2 * day, 170, [S('git.pikoci-pr', 'get', 'succeeded', 6, gitLog('d4a11f0')), S('go test', 'task', 'succeeded', 162, testLog(true))],
     { tests: T(unitTests()) });
   // #481 superseded commit c0ffee1: cancelled on push
