@@ -154,6 +154,7 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .card { display: block; color: inherit; background: var(--bg1); border: 1px solid var(--line); border-top: 4px solid var(--card, var(--line)); border-radius: 8px; padding: 11px 13px; }
 .card:hover { text-decoration: none; box-shadow: 0 2px 10px rgba(0,0,0,.09); }
 .card-head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+.card-head > b { white-space: nowrap; }
 .card-foot { margin-top: 8px; }
 
 /* changes */
@@ -502,6 +503,7 @@ header nav { flex-wrap: wrap; }
   border-color: var(--edge); border-radius: 2px;
   box-shadow: 1px 1px 0 var(--line), 5px 6px 0 color-mix(in srgb, var(--edge) 38%, transparent);
 }
+[data-skin="paper"] .card { border-top-color: var(--card); }
 [data-skin="paper"] .tbl-scroll { background: var(--bg1); border: 1px solid var(--edge); border-radius: 2px;
   box-shadow: 1px 1px 0 var(--line), 5px 6px 0 color-mix(in srgb, var(--edge) 38%, transparent); margin-right: 6px; margin-bottom: 16px; }
 [data-skin="paper"] .tbl-scroll .tbl { border: 0; box-shadow: none; }
