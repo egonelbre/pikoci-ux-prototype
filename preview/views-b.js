@@ -183,7 +183,7 @@
     const last = hist[hist.length - 1].dur;
     const drift = last > med * 1.25 ? `<b class="c-failed" title="last run ${fmtDur(last)} vs median ${fmtDur(med)}">↑</b>`
       : last < med * 0.8 ? `<b class="c-succeeded" title="last run ${fmtDur(last)} vs median ${fmtDur(med)}">↓</b>` : '';
-    return `<span class="spark">${bars}</span><span class="small nowrap"> ${fmtDur(last)}${drift}</span>`;
+    return `<span class="spark-wrap"><span class="spark">${bars}</span><span class="spark-dur small nowrap">${fmtDur(last)}</span><span class="spark-drift">${drift}</span></span>`;
   };
 
   VIEWS.pipelines = function () {
@@ -221,7 +221,7 @@
         <td class="r"><a class="btn sm" href="#/p/${pl.name}/config" onclick="event.stopPropagation()">Config</a></td>
       </tr>`;
     };
-    const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th>weather · last ${10}</th><th>duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
+    const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th title="Last 10 completed runs; the glyph summarizes their pass rate">weather</th><th title="Run durations, oldest to newest; arrow compares the latest with the median">duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
     const grouped = !P.team() && pls.length > 9;
     const rows = grouped
       ? D().teams.map(t => {
@@ -237,7 +237,9 @@
         <span class="sp"></span>
         <span class="mut small">${pls.length} of ${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl ptbl">${head}<tbody>${rows}</tbody></table></div>
+      <div class="tbl-scroll"><table class="tbl ctbl ptbl fixed">
+        <colgroup><col style="width:36px"><col style="width:50%"><col><col style="width:132px"><col style="width:152px"><col style="width:90px"><col style="width:70px"></colgroup>
+        ${head}<tbody>${rows}</tbody></table></div>
       <p class="mut small">Weather = last 10 completed runs (glyph is the pass rate); duration bars are the same runs oldest→newest — ↑/↓ marks the last run drifting beyond ±25%/−20% of the median. Real installs derive both from the builds table; deep history lands with Insights (Phase 4).</p>
     </div>`;
   };

@@ -13,6 +13,9 @@
     const attn = P.attention();
     const active = id => (sec === id || (id === 'home' && !route[0]) || (id === 'pipelines' && ['p', 'b'].includes(sec))) ? 'on' : '';
     const tsel = P.team();
+    const font = document.documentElement.dataset.font;
+    const skin = document.documentElement.dataset.skin;
+    const styleOpen = document.querySelector('.style-lab')?.open;
     return `<header>
       <a class="logo" href="#/"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.15em;vertical-align:-0.2em"> PikoCI <span class="preview-tag">preview</span></a>
       <select class="team-sel" aria-label="team scope" title="team scope — filters every page (maps to the backend's team scoping)"
@@ -25,6 +28,17 @@
       </nav>
       ${attn.items.length ? `<a href="#/" class="attn-badge" title="items needing you">${attn.items.length}</a>` : ''}
       <span class="sp"></span>
+      <details class="style-lab" ${styleOpen ? 'open' : ''}>
+        <summary class="ghost" title="try UI styles">✦ Style</summary>
+        <div class="style-pop">
+          <fieldset><legend>Typeface</legend><div class="style-options type-options">
+            ${[['system', 'System'], ['rounded', 'Rounded'], ['mono', 'Mono'], ['accessible', 'Accessible'], ['space', 'Space'], ['serif', 'Serif'], ['slab', 'Slab'], ['typewriter', 'Typewriter'], ['condensed', 'Condensed'], ['arcade', 'Arcade']].map(([v, label]) => `<label><input type="radio" name="font" value="${v}" ${font === v ? 'checked' : ''} onchange="document.documentElement.dataset.font=this.value"><span>${label}</span></label>`).join('')}
+          </div></fieldset>
+          <fieldset><legend>Boxes &amp; borders</legend><div class="style-options skin-options">
+            ${[['soft', 'Soft'], ['pixel', 'Pixel'], ['glow', 'Glow'], ['outline', 'Outline'], ['paper', 'Paper'], ['bubble', 'Bubble'], ['flat', 'Flat'], ['bevel', 'Bevel'], ['blueprint', 'Blueprint'], ['glass', 'Glass']].map(([v, label]) => `<label><input type="radio" name="skin" value="${v}" ${skin === v ? 'checked' : ''} onchange="document.documentElement.dataset.skin=this.value"><span>${label}</span></label>`).join('')}
+          </div></fieldset>
+        </div>
+      </details>
       <button class="ghost" data-act="theme" title="toggle theme">◐</button>
       <button class="ghost" data-palette-btn aria-label="open command palette" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true}))">⌘K</button>
       <a class="${sec === 'settings' ? 'on' : ''}" href="#/settings">egon ⚙</a>
