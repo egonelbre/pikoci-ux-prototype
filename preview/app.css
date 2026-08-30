@@ -193,6 +193,8 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .tbl.fixed { table-layout: fixed; }
 .tbl.fixed td { overflow: hidden; }
 .ctbl .ct-title { max-width: none; width: auto; }
+.ctbl td:first-child + td.ct-title, .ctbl th:first-child:empty + th { padding-left: 4px; }
+.changes-table .row-link b { margin-right: 4px; }
 .ctt { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .ctt > * { flex: none; }
 .ctt .row-link, .ctt .shrink { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

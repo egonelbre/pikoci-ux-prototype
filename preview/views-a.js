@@ -168,7 +168,7 @@
         <span class="sp"></span>
         <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${P.team() ? ' in ' + esc(P.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl fixed">
+      <div class="tbl-scroll"><table class="tbl ctbl fixed changes-table">
         <colgroup><col style="width:30px"><col><col style="width:92px"><col style="width:114px"><col style="width:188px"><col style="width:132px"><col style="width:84px"></colgroup>
         <thead><tr><th></th><th>PR</th><th>repo</th><th>author</th><th>branch @ head</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
         <tbody>
