@@ -44,14 +44,30 @@
     });
     const rowY = []; let acc = pad;
     for (let r = 0; r < nRows; r++) { rowY[r] = acc; acc += rowH[r] + rowGap; }
+    // horizontal alignment per row: center (no ragged-right whitespace) —
+    // except a lone continuation row, which tucks under the previous row's
+    // last column so its wrap connector stays short
+    const rowLis = [];
+    L.forEach((_, li) => (rowLis[rowOf[li]] = rowLis[rowOf[li]] || []).push(li));
+    const contentW = maxRowW - 2 * pad;
+    const xOff = rowLis.map((lis, r) => {
+      const last = lis[lis.length - 1], lw = last === 0 ? resW : nodeW;
+      const rowW = layerX[last] + lw - pad;
+      if (r > 0 && lis.length === 1) {
+        const prev = rowLis[r - 1];
+        return Math.max(0, Math.min(layerX[prev[prev.length - 1]] - pad, contentW - rowW));
+      }
+      return (contentW - rowW) / 2;
+    });
     const pos = {};
     L.forEach((layer, li) => {
       const w = li === 0 ? resW : nodeW, h = li === 0 ? resH : nodeH;
       const used = layer.length * (h + gapY) - gapY;
       let y = rowY[rowOf[li]] + (rowH[rowOf[li]] - used) / 2; // center within row
-      layer.forEach(n => { pos[n.name] = { x: layerX[li], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
+      layer.forEach(n => { pos[n.name] = { x: layerX[li] + xOff[rowOf[li]], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
     });
-    const W = maxRowW + (nRows > 1 ? 10 : 0), H = acc - rowGap + pad; // gutter so wrap glyphs never clip
+    const W = maxRowW + (nRows > 1 ? 26 : 0), H = acc - rowGap + pad; // gutter for the wrap lanes
+    const lanes = {}; // parallel wrap edges into the same row ride offset lanes
     let edges = '';
     for (const j of pl.jobs) for (const inp of j.inputs || []) {
       const targets = (inp.passed && inp.passed.length) ? inp.passed : [inp.res];
@@ -66,15 +82,17 @@
           edges += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none"
             stroke="var(--edge)" stroke-width="${sw}" ${dash}/>`;
         } else {
-          // wrap connector — the ↵ of graph land: the edge exits the row's
-          // right margin and HOOKS DOWNWARD (↴ "continues below"), then the
-          // next row opens with the matching hook from above (↳) into the
-          // target. Bolder than plain edges so the wrap can't be missed.
-          const wsw = Math.max(sw, 2.4), cap = 'stroke-linecap="round" stroke-linejoin="round"';
-          const xe = maxRowW - pad + 8;   // just past the rightmost node
-          edges += `<path d="M${a.x + a.w},${y1} H${xe} q9,0 9,9 v5" fill="none" stroke="var(--edge)" stroke-width="${wsw}" ${cap} ${dash}/>
-            <path d="M${xe + 4},${y1 + 11} l5,7 l5,-7 z" fill="var(--edge)"/>
-            <path d="M${pad - 14},${y2 - 14} v5 q0,9 9,9 H${b.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${wsw}" ${cap} ${dash}/>
+          // wrap connector: one CONTINUOUS routed line with rounded corners —
+          // out to the right lane, down, left along the channel between the
+          // rows, then a drop just before the TARGET (not a detour around the
+          // page edge), into its left side. Parallel edges ride offset lanes.
+          const k = ((lanes[b.row] = (lanes[b.row] || 0)), lanes[b.row]++) % 5; // ≤5 lanes; heavy fan-ins share a bus
+          const R = 10, cap = 'stroke-linecap="round" stroke-linejoin="round"';
+          const xR = maxRowW - pad + 10 + k * 6;          // right vertical lane
+          const ex = Math.max(2, b.x - 12 - k * 5);       // drop lane just left of the target
+          const cy = rowY[b.row] - Math.round(rowGap * 0.62) + k * 6; // channel between rows
+          edges += `<path d="M${a.x + a.w},${y1} H${xR - R} q${R},0 ${R},${R} V${cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${y2 - R} q0,${R} ${R},${R} H${b.x - 2}"
+              fill="none" stroke="var(--edge)" stroke-width="${sw}" ${cap} ${dash}/>
             <path d="M${b.x - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
         }
       }
