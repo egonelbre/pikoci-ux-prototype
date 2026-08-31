@@ -59,14 +59,17 @@
       }
       return (contentW - rowW) / 2;
     });
+    // wrapped graphs reserve a LEFT gutter too, so the drop lanes into a
+    // row's first column have room to sit side by side instead of stacking
+    const LX = nRows > 1 ? 34 : 0;
     const pos = {};
     L.forEach((layer, li) => {
       const w = li === 0 ? resW : nodeW, h = li === 0 ? resH : nodeH;
       const used = layer.length * (h + gapY) - gapY;
       let y = rowY[rowOf[li]] + (rowH[rowOf[li]] - used) / 2; // center within row
-      layer.forEach(n => { pos[n.name] = { x: layerX[li] + xOff[rowOf[li]], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
+      layer.forEach(n => { pos[n.name] = { x: LX + layerX[li] + xOff[rowOf[li]], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
     });
-    const W = maxRowW + (nRows > 1 ? 26 : 0), H = acc - rowGap + pad; // gutter for the wrap lanes
+    const W = LX + maxRowW + (nRows > 1 ? 26 : 0), H = acc - rowGap + pad; // gutters for the wrap lanes
     let edges = '';
     // cross-row edges are collected per SOURCE: one trunk carries the wrap,
     // and it SPLITS in the destination row (short taps off the channel) —
@@ -101,10 +104,10 @@
         const k = (gs.length - 1 - i) % 5;
         const R = 10, cap = 'stroke-linecap="round" stroke-linejoin="round"';
         const y1 = g.a.y + g.a.h / 2;
-        const xR = maxRowW - pad + 10 + k * 6;                        // right vertical lane
+        const xR = LX + maxRowW - pad + 10 + k * 6;                   // right vertical lane
         const cy = rowY[g.row] - Math.round(rowGap * 0.62) + k * 6;   // channel between rows
         const ts = g.targets.slice().sort((p, q) => q.x - p.x);       // leftmost target ends the trunk
-        const tapX = (b2, ti) => Math.max(2, b2.x - 12 - k * 5 - ti * 5);
+        const tapX = (b2, ti) => Math.max(6, b2.x - 12 - k * 5 - ti * 5);
         const drop = (b2, ti) => { // rounded corner off the channel, down, into the target
           const y2 = b2.y + b2.h / 2, tx = tapX(b2, ti);
           return `<path d="M${tx + R},${cy} q-${R},0 -${R},${R} V${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}"
