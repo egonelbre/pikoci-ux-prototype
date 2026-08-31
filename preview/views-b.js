@@ -25,30 +25,56 @@
   function graphSVG(pl, ctxRef) {
     const L = layers(pl).out;
     const nodeW = 158, nodeH = 44, resW = 130, resH = 30, gapX = 84, gapY = 20, pad = 20;
-    const pos = {}; let x = pad, maxH = 0;
+    // a long sequential chain wraps like text: layers flow left→right and
+    // continue on the next row instead of scrolling off into the void
+    const MAXW = 1160, rowGap = 52;
+    const rowOf = [], layerX = [];
+    let x = pad, row = 0, maxRowW = 0;
+    L.forEach((layer, li) => {
+      const w = li === 0 ? resW : nodeW;
+      if (x + w + pad > MAXW && x > pad) { row++; x = pad; }
+      rowOf[li] = row; layerX[li] = x; x += w + gapX;
+      maxRowW = Math.max(maxRowW, x - gapX + pad);
+    });
+    const nRows = row + 1;
+    const rowH = new Array(nRows).fill(0);
+    L.forEach((layer, li) => {
+      const h = li === 0 ? resH : nodeH;
+      rowH[rowOf[li]] = Math.max(rowH[rowOf[li]], layer.length * (h + gapY) - gapY);
+    });
+    const rowY = []; let acc = pad;
+    for (let r = 0; r < nRows; r++) { rowY[r] = acc; acc += rowH[r] + rowGap; }
+    const pos = {};
     L.forEach((layer, li) => {
       const w = li === 0 ? resW : nodeW, h = li === 0 ? resH : nodeH;
-      let y = pad;
-      layer.forEach(n => { pos[n.name] = { x, y, w, h, kind: n.kind }; y += h + gapY; });
-      maxH = Math.max(maxH, y); x += w + gapX;
+      const used = layer.length * (h + gapY) - gapY;
+      let y = rowY[rowOf[li]] + (rowH[rowOf[li]] - used) / 2; // center within row
+      layer.forEach(n => { pos[n.name] = { x: layerX[li], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
     });
-    for (const layer of L) { // center layers
-      if (!layer.length) continue;
-      const ns = layer.map(n => pos[n.name]);
-      const used = ns[ns.length - 1].y + ns[ns.length - 1].h - pad;
-      const off = (maxH - pad - used) / 2;
-      ns.forEach(n => n.y += off);
-    }
-    const W = x - gapX + pad, H = maxH + pad;
+    const W = maxRowW, H = acc - rowGap + pad;
     let edges = '';
     for (const j of pl.jobs) for (const inp of j.inputs || []) {
       const targets = (inp.passed && inp.passed.length) ? inp.passed : [inp.res];
       for (const from of targets) {
         const a = pos[from], b = pos[j.name];
         if (!a || !b) continue;
-        const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
-        edges += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none"
-          stroke="var(--edge)" stroke-width="${inp.passed && inp.passed.length ? 2 : 1.4}" ${inp.trigger === false ? 'stroke-dasharray="4 4"' : ''}/>`;
+        const sw = inp.passed && inp.passed.length ? 2 : 1.4;
+        const dash = inp.trigger === false ? 'stroke-dasharray="4 4"' : '';
+        const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
+        if (a.row === b.row) {
+          const x1 = a.x + a.w, x2 = b.x, mx = (x1 + x2) / 2;
+          edges += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none"
+            stroke="var(--edge)" stroke-width="${sw}" ${dash}/>`;
+        } else {
+          // wrap connector: exit the row's right margin, re-enter the next
+          // row's left margin — the ↵ of graph land, both ends chevroned
+          const xe = W - pad + 12;
+          edges += `<path d="M${a.x + a.w},${y1} H${xe}" fill="none" stroke="var(--edge)" stroke-width="${sw}" ${dash}/>
+            <path d="M${xe - 1},${y1 - 5} l6,5 l-6,5" fill="none" stroke="var(--edge)" stroke-width="${sw}"/>
+            <path d="M${pad - 12},${y2} H${b.x - 6}" fill="none" stroke="var(--edge)" stroke-width="${sw}" ${dash}/>
+            <path d="M${pad - 13},${y2 - 5} l6,5 l-6,5" fill="none" stroke="var(--edge)" stroke-width="${sw}"/>
+            <path d="M${b.x - 1},${y2} l-7,-4 v8 z" fill="var(--edge)"/>`;
+        }
       }
     }
     let nodes = '';
@@ -183,7 +209,7 @@
     const last = hist[hist.length - 1].dur;
     const drift = last > med * 1.25 ? `<b class="c-failed" title="last run ${fmtDur(last)} vs median ${fmtDur(med)}">↑</b>`
       : last < med * 0.8 ? `<b class="c-succeeded" title="last run ${fmtDur(last)} vs median ${fmtDur(med)}">↓</b>` : '';
-    return `<span class="spark-wrap"><span class="spark">${bars}</span><span class="spark-dur small nowrap">${fmtDur(last)}</span><span class="spark-drift">${drift}</span></span>`;
+    return `<span class="spark">${bars}</span><span class="small nowrap"> ${fmtDur(last)}${drift}</span>`;
   };
 
   VIEWS.pipelines = function () {
@@ -221,7 +247,7 @@
         <td class="r"><a class="btn sm" href="#/p/${pl.name}/config" onclick="event.stopPropagation()">Config</a></td>
       </tr>`;
     };
-    const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th title="Last 10 completed runs; the glyph summarizes their pass rate">weather</th><th title="Run durations, oldest to newest; arrow compares the latest with the median">duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
+    const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th>weather · last ${10}</th><th>duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
     const grouped = !P.team() && pls.length > 9;
     const rows = grouped
       ? D().teams.map(t => {
@@ -237,9 +263,7 @@
         <span class="sp"></span>
         <span class="mut small">${pls.length} of ${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl ptbl fixed">
-        <colgroup><col style="width:36px"><col style="width:50%"><col><col style="width:132px"><col style="width:152px"><col style="width:90px"><col style="width:70px"></colgroup>
-        ${head}<tbody>${rows}</tbody></table></div>
+      <div class="tbl-scroll"><table class="tbl ctbl ptbl">${head}<tbody>${rows}</tbody></table></div>
       <p class="mut small">Weather = last 10 completed runs (glyph is the pass rate); duration bars are the same runs oldest→newest — ↑/↓ marks the last run drifting beyond ±25%/−20% of the median. Real installs derive both from the builds table; deep history lands with Insights (Phase 4).</p>
     </div>`;
   };
@@ -395,7 +419,7 @@
             </button>
             <div ${sp.status === 'failed' || sp.status === 'started' ? '' : 'hidden'} data-fold="st:${b.id}:${i}">
               ${sp.log.length > 200 ? `<div class="mut small pad-s">showing last 200 of ${sp.log.length} lines · <a href="javascript:void(0)" data-act="noop">download full log</a> <span class="mut">(tail-first)</span></div>` : ''}
-              ${sp.log.length ? `<pre class="log">${sp.log.slice(-200).map((l, k) => `<span class="ln"><span class="lno">${Math.max(0, sp.log.length - 200) + k + 1}</span>${/FAIL|ERROR|Error /.test(l) ? `<span class="l-err">${esc(l)}</span>` : /✓|^ok |OK$|PASS/.test(l) ? `<span class="l-ok">${esc(l)}</span>` : /^\$ /.test(l) ? `<span class="l-cmd">${esc(l)}</span>` : esc(l)}</span>`).join('')}</pre>` : '<div class="pad-s mut small">no output yet</div>'}
+              ${sp.log.length ? `<pre class="log">${sp.log.slice(-200).map((l, k) => `<span class="ln"><span class="lno">${Math.max(0, sp.log.length - 200) + k + 1}</span>${/FAIL|ERROR|Error /.test(l) ? `<span class="l-err">${esc(l)}</span>` : /✓|^ok |OK$|PASS/.test(l) ? `<span class="l-ok">${esc(l)}</span>` : /^\$ /.test(l) ? `<span class="l-cmd">${esc(l)}</span>` : esc(l)}</span>`).join('\n')}</pre>` : '<div class="pad-s mut small">no output yet</div>'}
             </div>
           </div>`).join('')}
           </div>
