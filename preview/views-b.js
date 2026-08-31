@@ -27,12 +27,12 @@
     const nodeW = 158, nodeH = 44, resW = 130, resH = 30, gapX = 84, gapY = 20, pad = 20;
     // a long sequential chain wraps like text: layers flow left→right and
     // continue on the next row instead of scrolling off into the void
-    const MAXW = 1160, rowGap = 52;
+    const MAXW = 1160, rowGap = 52, wrapGutter = 42; // right space reserved for the ↴ hooks
     const rowOf = [], layerX = [];
     let x = pad, row = 0, maxRowW = 0;
     L.forEach((layer, li) => {
       const w = li === 0 ? resW : nodeW;
-      if (x + w + pad > MAXW && x > pad) { row++; x = pad; }
+      if (x + w + pad + wrapGutter > MAXW && x > pad) { row++; x = pad; }
       rowOf[li] = row; layerX[li] = x; x += w + gapX;
       maxRowW = Math.max(maxRowW, x - gapX + pad);
     });
@@ -51,7 +51,7 @@
       let y = rowY[rowOf[li]] + (rowH[rowOf[li]] - used) / 2; // center within row
       layer.forEach(n => { pos[n.name] = { x: layerX[li], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
     });
-    const W = maxRowW, H = acc - rowGap + pad;
+    const W = maxRowW + (nRows > 1 ? 10 : 0), H = acc - rowGap + pad; // gutter so wrap glyphs never clip
     let edges = '';
     for (const j of pl.jobs) for (const inp of j.inputs || []) {
       const targets = (inp.passed && inp.passed.length) ? inp.passed : [inp.res];
@@ -66,14 +66,16 @@
           edges += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none"
             stroke="var(--edge)" stroke-width="${sw}" ${dash}/>`;
         } else {
-          // wrap connector: exit the row's right margin, re-enter the next
-          // row's left margin — the ↵ of graph land, both ends chevroned
-          const xe = W - pad + 12;
-          edges += `<path d="M${a.x + a.w},${y1} H${xe}" fill="none" stroke="var(--edge)" stroke-width="${sw}" ${dash}/>
-            <path d="M${xe - 1},${y1 - 5} l6,5 l-6,5" fill="none" stroke="var(--edge)" stroke-width="${sw}"/>
-            <path d="M${pad - 12},${y2} H${b.x - 6}" fill="none" stroke="var(--edge)" stroke-width="${sw}" ${dash}/>
-            <path d="M${pad - 13},${y2 - 5} l6,5 l-6,5" fill="none" stroke="var(--edge)" stroke-width="${sw}"/>
-            <path d="M${b.x - 1},${y2} l-7,-4 v8 z" fill="var(--edge)"/>`;
+          // wrap connector — the ↵ of graph land: the edge exits the row's
+          // right margin and HOOKS DOWNWARD (↴ "continues below"), then the
+          // next row opens with the matching hook from above (↳) into the
+          // target. Bolder than plain edges so the wrap can't be missed.
+          const wsw = Math.max(sw, 2.4), cap = 'stroke-linecap="round" stroke-linejoin="round"';
+          const xe = maxRowW - pad + 8;   // just past the rightmost node
+          edges += `<path d="M${a.x + a.w},${y1} H${xe} q9,0 9,9 v5" fill="none" stroke="var(--edge)" stroke-width="${wsw}" ${cap} ${dash}/>
+            <path d="M${xe + 4},${y1 + 11} l5,7 l5,-7 z" fill="var(--edge)"/>
+            <path d="M${pad - 14},${y2 - 14} v5 q0,9 9,9 H${b.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${wsw}" ${cap} ${dash}/>
+            <path d="M${b.x - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
         }
       }
     }
