@@ -71,9 +71,8 @@
     });
     const W = LX + maxRowW + (nRows > 1 ? 26 : 0), H = acc - rowGap + pad; // gutters for the wrap lanes
     let edges = '';
-    // cross-row edges are collected per SOURCE: one trunk carries the wrap,
-    // and it SPLITS in the destination row (short taps off the channel) —
-    // a fan-out of 3 costs one routed line + two taps, not three full routes
+    // ---- collect edges: same-row (flat) + per-source wrap groups ----------
+    const flat = [];
     const wrapGroups = new Map();
     for (const j of pl.jobs) for (const inp of j.inputs || []) {
       const targets = (inp.passed && inp.passed.length) ? inp.passed : [inp.res];
@@ -82,56 +81,81 @@
         if (!a || !b) continue;
         const sw = inp.passed && inp.passed.length ? 2 : 1.4;
         const dash = inp.trigger === false ? 'stroke-dasharray="4 4"' : '';
-        const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
-        if (a.row === b.row) {
-          const x1 = a.x + a.w, x2 = b.x, mx = (x1 + x2) / 2;
-          edges += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none"
-            stroke="var(--edge)" stroke-width="${sw}" ${dash}/>`;
-        } else {
+        if (a.row === b.row) flat.push({ from, to: j.name, a, b, sw, dash });
+        else {
           const key = from + '|' + b.row;
-          if (!wrapGroups.has(key)) wrapGroups.set(key, { a, row: b.row, sw, dash, targets: [] });
-          wrapGroups.get(key).targets.push(b);
+          if (!wrapGroups.has(key)) wrapGroups.set(key, { from, a, row: b.row, sw, dash, targets: [] });
+          wrapGroups.get(key).targets.push({ name: j.name, p: b });
         }
       }
     }
-    // lane order: the TOPMOST source takes the OUTERMOST right lane and the
-    // LOWEST channel lane — lines then nest instead of crossing
+    // ---- wrap lanes: topmost source takes the outermost right lane and the
+    // lowest channel; entry lanes reverse so channels never cross drops -----
     const byRow = {};
     for (const g of wrapGroups.values()) (byRow[g.row] = byRow[g.row] || []).push(g);
     for (const row of Object.keys(byRow)) {
       const gs = byRow[row].sort((p, q) => p.a.y - q.a.y);
       gs.forEach((g, i) => {
-        const k = (gs.length - 1 - i) % 5;
-        const R = 10, cap = 'stroke-linecap="round" stroke-linejoin="round"';
-        const y1 = g.a.y + g.a.h / 2;
-        const xR = LX + maxRowW - pad + 10 + k * 6;                   // right vertical lane
-        const cy = rowY[g.row] - Math.round(rowGap * 0.62) + k * 6;   // channel between rows
-        const ts = g.targets.slice().sort((p, q) => p.y - q.y);
-        const head = (x2, y2) => `<path d="M${x2 - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
-        const trunkTo = (ex, ey) => `<path d="M${g.a.x + g.a.w},${y1} H${xR - R} q${R},0 ${R},${R} V${cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}"
-            fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
-        if (ts.length === 1) {
-          // single target: the trunk runs straight into it. Entry lanes are
-          // REVERSED vs the exit lanes: a line riding the outside (lower
-          // channel) drops on the inside, so channels never cross drops
-          const kIn = Math.min(gs.length, 5) - 1 - k;
-          const b2 = ts[0], y2 = b2.y + b2.h / 2, ex = Math.max(6, b2.x - 12 - kIn * 5);
-          edges += trunkTo(ex, y2 - R) +
-            `<path d="M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` +
-            head(b2.x, y2);
-        } else {
-          // fan-out: the trunk splits ONCE, at an invisible node in the new
-          // row's left gutter — from there ordinary bezier edges fan to the
-          // targets, exactly like a real node's fan-out would
-          const jx = Math.max(8, 8 + k * 6);
-          const jy = ts.reduce((s2, b2) => s2 + b2.y + b2.h / 2, 0) / ts.length + (k - (gs.length - 1) / 2) * 22;
-          edges += trunkTo(jx, jy);
-          for (const b2 of ts) {
-            const y2 = b2.y + b2.h / 2, mx = (jx + b2.x) / 2;
-            edges += `<path d="M${jx},${jy} C${mx},${jy} ${mx},${y2} ${b2.x - 2},${y2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` + head(b2.x, y2);
-          }
+        g.k = (gs.length - 1 - i) % 5;
+        g.kIn = Math.min(gs.length, 5) - 1 - g.k;
+        g.xR = LX + maxRowW - pad + 10 + g.k * 6;
+        g.cy = rowY[g.row] - Math.round(rowGap * 0.62) + g.k * 6;
+        if (g.targets.length > 1) {
+          g.targets.sort((p, q) => p.p.y - q.p.y);
+          g.jx = Math.max(8, 8 + g.k * 6);
+          g.jy = g.targets.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.targets.length + (g.k - (gs.length - 1) / 2) * 22;
         }
       });
+    }
+    // ---- ports: a node's outgoing/incoming attachment points spread evenly
+    // along its edge, ordered by where the OTHER end sits vertically --------
+    const outs = {}, ins = {};
+    const slot = (m, name) => (m[name] = m[name] || []);
+    const cYp = p => p.y + p.h / 2;
+    for (const e of flat) {
+      slot(outs, e.from).push({ key: cYp(e.b), set: y => { e.y1 = y; } });
+      slot(ins, e.to).push({ key: cYp(e.a), set: y => { e.y2 = y; } });
+    }
+    for (const g of wrapGroups.values()) {
+      slot(outs, g.from).push({ key: 1e6 + g.row, set: y => { g.y1 = y; } }); // trunk leaves at the bottom port
+      if (g.targets.length === 1) {
+        // drops arrive from above; among drops, the upper channel's takes the
+        // lower port (its horizontal then passes under the inner verticals)
+        slot(ins, g.targets[0].name).push({ key: -1e6 - g.cy, set: y => { g.entryY = y; } });
+      } else {
+        g.fanY = {};
+        for (const t of g.targets)
+          slot(ins, t.name).push({ key: g.jy, set: y => { g.fanY[t.name] = y; } });
+      }
+    }
+    for (const m of [outs, ins]) for (const name of Object.keys(m)) {
+      const p = pos[name], list = m[name].sort((x2, y2) => x2.key - y2.key);
+      list.forEach((it, i) => it.set(p.y + p.h * (i + 1) / (list.length + 1)));
+    }
+    // ---- emit -------------------------------------------------------------
+    for (const e of flat) {
+      const x1 = e.a.x + e.a.w, x2 = e.b.x, mx = (x1 + x2) / 2;
+      edges += `<path d="M${x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${x2},${e.y2}" fill="none"
+        stroke="var(--edge)" stroke-width="${e.sw}" ${e.dash}/>`;
+    }
+    for (const g of wrapGroups.values()) {
+      const R = 10, cap = 'stroke-linecap="round" stroke-linejoin="round"';
+      const head = (x2, y2) => `<path d="M${x2 - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
+      const trunkTo = (ex, ey) => `<path d="M${g.a.x + g.a.w},${g.y1} H${g.xR - R} q${R},0 ${R},${R} V${g.cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}"
+          fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
+      if (g.targets.length === 1) {
+        const b2 = g.targets[0].p, y2 = g.entryY, ex = Math.max(6, b2.x - 12 - g.kIn * 5);
+        edges += trunkTo(ex, y2 - R) +
+          `<path d="M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` +
+          head(b2.x, y2);
+      } else {
+        // fan-out splits ONCE at an invisible node in the new row's gutter
+        edges += trunkTo(g.jx, g.jy);
+        for (const t of g.targets) {
+          const y2 = g.fanY[t.name], mx = (g.jx + t.p.x) / 2;
+          edges += `<path d="M${g.jx},${g.jy} C${mx},${g.jy} ${mx},${y2} ${t.p.x - 2},${y2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` + head(t.p.x, y2);
+        }
+      }
     }
     let nodes = '';
     const refs = new Set();
