@@ -106,19 +106,28 @@
         const y1 = g.a.y + g.a.h / 2;
         const xR = LX + maxRowW - pad + 10 + k * 6;                   // right vertical lane
         const cy = rowY[g.row] - Math.round(rowGap * 0.62) + k * 6;   // channel between rows
-        const ts = g.targets.slice().sort((p, q) => q.x - p.x);       // leftmost target ends the trunk
-        const tapX = (b2, ti) => Math.max(6, b2.x - 12 - k * 5 - ti * 5);
-        const drop = (b2, ti) => { // rounded corner off the channel, down, into the target
-          const y2 = b2.y + b2.h / 2, tx = tapX(b2, ti);
-          return `<path d="M${tx + R},${cy} q-${R},0 -${R},${R} V${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}"
-              fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>
-            <path d="M${b2.x - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
-        };
-        ts.slice(0, -1).forEach((b2, ti) => { edges += drop(b2, ti); });
-        const last = ts[ts.length - 1], lx = tapX(last, ts.length - 1), y2 = last.y + last.h / 2;
-        edges += `<path d="M${g.a.x + g.a.w},${y1} H${xR - R} q${R},0 ${R},${R} V${cy - R} q0,${R} -${R},${R} H${lx + R} q-${R},0 -${R},${R} V${y2 - R} q0,${R} ${R},${R} H${last.x - 2}"
-            fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>
-          <path d="M${last.x - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
+        const ts = g.targets.slice().sort((p, q) => p.y - q.y);
+        const head = (x2, y2) => `<path d="M${x2 - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
+        const trunkTo = (ex, ey) => `<path d="M${g.a.x + g.a.w},${y1} H${xR - R} q${R},0 ${R},${R} V${cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}"
+            fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
+        if (ts.length === 1) {
+          // single target: the trunk runs straight into it
+          const b2 = ts[0], y2 = b2.y + b2.h / 2, ex = Math.max(6, b2.x - 12 - k * 5);
+          edges += trunkTo(ex, y2 - R) +
+            `<path d="M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` +
+            head(b2.x, y2);
+        } else {
+          // fan-out: the trunk splits ONCE, at an invisible node in the new
+          // row's left gutter — from there ordinary bezier edges fan to the
+          // targets, exactly like a real node's fan-out would
+          const jx = Math.max(8, 8 + k * 6);
+          const jy = ts.reduce((s2, b2) => s2 + b2.y + b2.h / 2, 0) / ts.length + (k - (gs.length - 1) / 2) * 5;
+          edges += trunkTo(jx, jy);
+          for (const b2 of ts) {
+            const y2 = b2.y + b2.h / 2, mx = (jx + b2.x) / 2;
+            edges += `<path d="M${jx},${jy} C${mx},${jy} ${mx},${y2} ${b2.x - 2},${y2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` + head(b2.x, y2);
+          }
+        }
       });
     }
     let nodes = '';
