@@ -24,7 +24,7 @@
   }
   function graphSVG(pl, ctxRef) {
     const L = layers(pl).out;
-    const nodeW = 158, nodeH = 44, resW = 130, resH = 30, gapX = 84, gapY = 20, pad = 20;
+    const nodeW = 158, nodeH = 44, resW = 130, resH = 30, gapX = 84, gapY = 60, pad = 20;
     // a long sequential chain wraps like text: layers flow left→right and
     // continue on the next row instead of scrolling off into the void
     const MAXW = 1160, rowGap = 52, wrapGutter = 42; // right space reserved for the ↴ hooks
@@ -111,8 +111,11 @@
         const trunkTo = (ex, ey) => `<path d="M${g.a.x + g.a.w},${y1} H${xR - R} q${R},0 ${R},${R} V${cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}"
             fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
         if (ts.length === 1) {
-          // single target: the trunk runs straight into it
-          const b2 = ts[0], y2 = b2.y + b2.h / 2, ex = Math.max(6, b2.x - 12 - k * 5);
+          // single target: the trunk runs straight into it. Entry lanes are
+          // REVERSED vs the exit lanes: a line riding the outside (lower
+          // channel) drops on the inside, so channels never cross drops
+          const kIn = Math.min(gs.length, 5) - 1 - k;
+          const b2 = ts[0], y2 = b2.y + b2.h / 2, ex = Math.max(6, b2.x - 12 - kIn * 5);
           edges += trunkTo(ex, y2 - R) +
             `<path d="M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` +
             head(b2.x, y2);
@@ -121,7 +124,7 @@
           // row's left gutter — from there ordinary bezier edges fan to the
           // targets, exactly like a real node's fan-out would
           const jx = Math.max(8, 8 + k * 6);
-          const jy = ts.reduce((s2, b2) => s2 + b2.y + b2.h / 2, 0) / ts.length + (k - (gs.length - 1) / 2) * 5;
+          const jy = ts.reduce((s2, b2) => s2 + b2.y + b2.h / 2, 0) / ts.length + (k - (gs.length - 1) / 2) * 22;
           edges += trunkTo(jx, jy);
           for (const b2 of ts) {
             const y2 = b2.y + b2.h / 2, mx = (jx + b2.x) / 2;
