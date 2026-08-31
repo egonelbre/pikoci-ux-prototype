@@ -24,7 +24,7 @@
   }
   function graphSVG(pl, ctxRef) {
     const L = layers(pl).out;
-    const nodeW = 158, nodeH = 44, resW = 130, resH = 30, gapX = 84, gapY = 60, pad = 20;
+    const nodeW = 158, nodeH = 44, resW = 130, resH = 30, gapX = 84, gapY = 36, pad = 20;
     // a long sequential chain wraps like text: layers flow left→right and
     // continue on the next row instead of scrolling off into the void
     const MAXW = 1160, rowGap = 52, wrapGutter = 42; // right space reserved for the ↴ hooks
