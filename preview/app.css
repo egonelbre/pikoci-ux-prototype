@@ -413,7 +413,7 @@ header nav { flex-wrap: wrap; }
   * { scroll-behavior: auto !important; }
 }
 /* queue "why it waits" keeps a readable measure once its table scrolls */
-.ctbl td.small { min-width: 22ch; }
+.ctbl td.why { min-width: 22ch; }
 /* --- contrast (WCAG 2.1): status colors as TEXT, per theme ------------- */
 /* fills keep the PICO-8 brand values; text usages get darkened/lightened
    variants that clear 4.5:1 on bg1/bg2 (see review: run/warn/pause failed 3:1) */

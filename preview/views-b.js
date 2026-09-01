@@ -632,12 +632,12 @@
       <div class="meta" data-live><b>${running.length}</b> running · <b>${pend.length}</b> queued ·
         capacity <b>${busy}/${regd}</b> registered workers busy <span class="mut small">(--concurrency N registers N single-build workers)</span> on ${online.length} healthy host${online.length === 1 ? '' : 's'}${booting.length ? ` <b class="c-pending">+ ${booting.length} provisioning</b> (${booting.reduce((s, w) => s + (w.concurrency || 1), 0)} more on the way)` : ''}</div>
       ${pend.length ? `<h2>Waiting</h2>
-      <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th>why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th style="width:100%">why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
       ${pend.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-pending">⏳</td>
         <td class="nowrap"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
         <td class="nowrap"><code>${esc(b.queue.tag)}</code></td>
-        <td class="${b.queue.matching === 0 && !poolFor(b.queue.tag) ? 'c-failed' : 'mut'} small">${b.queue.matching === 0
+        <td class="${b.queue.matching === 0 && !poolFor(b.queue.tag) ? 'c-failed' : 'mut'} small why" style="width:100%">${b.queue.matching === 0
           ? (poolFor(b.queue.tag)
             ? `<span class="c-pending">pool ${esc(poolFor(b.queue.tag).name)} scaling up from zero (~${poolFor(b.queue.tag).bootSecs}s boot) — capacity on the way, not a config problem</span>`
             : `no healthy worker with tag "${esc(b.queue.tag)}" and no pool serves it — config problem, not load`)
@@ -694,12 +694,12 @@
         ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
         : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${P.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
         <td class="nowrap">${w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>'}</td>
-        <td>${w.tags.map(t => `<code>${t}</code>`).join(' ')}</td>
+        <td style="width:100%">${w.tags.map(t => `<code>${t}</code>`).join(' ')}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : cpu(w)}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : disk(w)}</td>
         <td class="mut small nowrap">${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}</td>
-        <td class="r">${w.running ? `${w.running}/${w.concurrency} busy` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
-        <td class="r">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="drain" data-arg="${esc(w.name)}" onclick="event.stopPropagation()" title="drain is worker-side today (SIGQUIT); click for details">drain</button>`}</td>
+        <td class="r nowrap">${w.running ? `${w.running}/${w.concurrency} busy` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
+        <td class="r nowrap">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="drain" data-arg="${esc(w.name)}" onclick="event.stopPropagation()" title="drain is worker-side today (SIGQUIT); click for details">drain</button>`}</td>
       </tr>`;
     const statics = workers.filter(w => !w.pool);
     const poolRows = pools.map(p => {
@@ -712,7 +712,7 @@
       ${inst.map(row).join('')}`;
     }).join('');
     return `<div class="page"><h1>Workers${P.team() ? ` <span class="mut small">· team ${esc(P.team())} + Global</span>` : ''}</h1>
-      <div class="tbl-scroll"><table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th>tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
+      <div class="tbl-scroll"><table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th style="width:100%">tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
       <tbody>
       ${statics.length ? `<tr class="tsub"><td colspan="9">static <span class="mut">· ${statics.length} registered</span></td></tr>${statics.map(row).join('')}` : ''}
       ${poolRows}

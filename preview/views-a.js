@@ -623,7 +623,7 @@
           <td class="nowrap"><code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}</td>
           <td class="mut small" style="width:100%">${esc(h.build)}</td>
           <td class="mut small nowrap r">${ago(h.at)}</td>
-          <td class="r">${i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : ''}</td>
+          <td class="r nowrap">${i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : ''}</td>
         </tr>`).join('')}
         </table></div></section>
     </div>`;
