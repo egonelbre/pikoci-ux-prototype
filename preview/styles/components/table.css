@@ -1,0 +1,40 @@
+/* Tables, and the column-sizing convention ui/table.js encodes.
+
+   Every column hugs its content except exactly one, which absorbs the
+   leftover width. `width: 1px` on a nowrap cell is a FLOOR the content
+   pushes open, not a real width; the fill column carries width:100%.
+   A readable-prose minimum belongs to the column that needs it (the
+   queue's "why it waits" -> .why), never to a font-size class — as
+   `.ctbl td.small { min-width: 22ch }` did, putting a 159px floor under
+   every small cell in the app. */
+
+.tbl { width: 100%; border-collapse: collapse; background: var(--bg1); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.tbl th { white-space: nowrap; text-align: left; font-size: 12px; color: var(--mut); padding: 7px 12px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.tbl td { padding: 7px 12px; border-bottom: 1px solid var(--line2); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.panel { background: var(--bg1); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.ctbl th { padding: 6px 10px; }
+.ctbl td { padding: 4px 10px; font-size: 13px; }
+.ctbl td:first-child { width: 24px; text-align: center; font-size: 12px; }
+.ctbl tbody tr { cursor: pointer; }
+.ctbl tbody tr:hover td { background: var(--bg2); }
+.ctbl .dots { gap: 3px; }
+/* Truncation happens in the inner .ctt flex wrapper, never on the td: a
+   max-width:0 td zeroes the column's max-content and Chrome hands the
+   surplus to everyone else. */
+.ctbl:not(.fixed) td.nowrap { width: 1px; } /* never inside table-layout:fixed — first-row cell widths would fight the colgroup */
+/* deterministic sizing where auto-layout misbehaves: fixed layout + colgroup;
+   every fixed column hugs its content, the bare <col> (title) takes the rest */
+.tbl.fixed { table-layout: fixed; }
+.tbl.fixed td { overflow: hidden; }
+.ctbl th:first-child:empty + th { padding-left: 4px; }
+.ctt { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.ctt > * { flex: none; }
+.ctt .row-link, .ctt .shrink { flex: 0 1 auto; min-width: 5ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trunc-code { display: inline-block; max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.you-mark { color: var(--accent); font-size: 12px; }
+/* tables scroll in their own container, never the page */
+.tbl-scroll { overflow-x: auto; margin-bottom: 10px; }
+.tbl-scroll .tbl { margin-bottom: 0; }
+/* queue "why it waits" keeps a readable measure once its table scrolls */
+.ctbl td.why { min-width: 22ch; }

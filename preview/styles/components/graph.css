@@ -1,0 +1,13 @@
+/* The pipeline DAG and the per-commit mini graph. */
+
+/* mini run graph */
+.run-graph { background: var(--bg1); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-bottom: 12px; overflow-x: auto; }
+
+/* graph */
+.graph-scroll { overflow: auto; background: var(--bg1); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.spanning { font-size: 12px; color: var(--mut); padding: 6px 4px; }
+.gnode { cursor: pointer; }
+.gnode:hover rect { stroke: var(--fg); stroke-width: 2; }
+.t-res { font: 12px var(--font-ui); fill: var(--mut); }
+.t-job { font: 600 12px var(--font-ui); fill: #fff; }
+.t-sub { font: 10.5px var(--font-ui); fill: rgba(255,255,255,.88); }

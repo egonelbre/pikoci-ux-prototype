@@ -1,0 +1,9 @@
+/* The filter bar ui/filter.js renders: query input, chip row, count. */
+
+.ctoolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.ctoolbar [data-filter] { flex: 0 1 280px; min-width: 160px; background: var(--bg1); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); padding: 4px 10px; font: inherit; font-size: 13px; }
+.ctoolbar [data-filter]:focus-visible { border-color: var(--accent); }
+.ctoolbar label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; user-select: none; }
+.chip-btn { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; background: var(--bg1); color: var(--mut); cursor: pointer; }
+.chip-btn:hover { border-color: var(--mut); color: var(--fg); }
+.chip-btn.on { background: var(--fg); color: var(--bg1); border-color: var(--fg); }

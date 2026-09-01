@@ -1,0 +1,19 @@
+/* Status as color and motion. The .c-* classes take the -t (text-contrast)
+   variants, not the fill values — see styles/tokens.css. */
+
+
+/* status text colors */
+.c-succeeded { color: var(--ok); } .c-failed { color: var(--bad); } .c-fail { color: var(--bad); }
+.c-started { color: var(--run); } .c-pending { color: var(--pend); }
+.c-cancelled { color: var(--cancel); } .c-warning { color: var(--warn); }
+.c-waiting_for_approval, .c-held { color: var(--appr); } .c-paused { color: var(--pause); }
+.c-none, .c-skipped { color: var(--mut3); }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.pulse { animation: pulse 1.3s ease-in-out infinite; }
+/* contrast-corrected text colors (WCAG 2.1) */
+.c-succeeded { color: var(--ok-t); } .c-failed, .c-fail { color: var(--bad-t); }
+.c-started { color: var(--run-t); } .c-pending { color: var(--pend-t); }
+.c-warning { color: var(--warn-t); } .c-paused { color: var(--pause-t); }
+.c-cancelled { color: var(--cancel-t); }
+.c-waiting_for_approval, .c-held { color: var(--appr-t); }
+.c-none, .c-skipped { color: var(--faint-t); }

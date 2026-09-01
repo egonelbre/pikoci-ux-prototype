@@ -5,7 +5,35 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PikoCI preview — self-test</title>
 <link rel="icon" type="image/png" sizes="32x32" href="../../logo/px/favicon-32.png">
-<link rel="stylesheet" href="../app.css">
+<!-- tokens -> base -> components -> views -> lab -> responsive.
+     Order is the cascade: later files may override earlier ones. -->
+<link rel="stylesheet" href="../styles/tokens.css">
+<link rel="stylesheet" href="../styles/base.css">
+<link rel="stylesheet" href="../styles/status.css">
+<link rel="stylesheet" href="../styles/components/header.css">
+<link rel="stylesheet" href="../styles/components/buttons.css">
+<link rel="stylesheet" href="../styles/components/filter.css">
+<link rel="stylesheet" href="../styles/components/table.css">
+<link rel="stylesheet" href="../styles/components/rowlink.css">
+<link rel="stylesheet" href="../styles/components/panel.css">
+<link rel="stylesheet" href="../styles/components/card.css">
+<link rel="stylesheet" href="../styles/components/strip.css">
+<link rel="stylesheet" href="../styles/components/dots.css">
+<link rel="stylesheet" href="../styles/components/context.css">
+<link rel="stylesheet" href="../styles/components/reason.css">
+<link rel="stylesheet" href="../styles/components/graph.css">
+<link rel="stylesheet" href="../styles/components/waterfall.css">
+<link rel="stylesheet" href="../styles/components/verdict.css">
+<link rel="stylesheet" href="../styles/components/log.css">
+<link rel="stylesheet" href="../styles/components/box.css">
+<link rel="stylesheet" href="../styles/components/palette.css">
+<link rel="stylesheet" href="../styles/components/toast.css">
+<link rel="stylesheet" href="../styles/views/changes.css">
+<link rel="stylesheet" href="../styles/views/pipelines.css">
+<link rel="stylesheet" href="../styles/views/workers.css">
+<link rel="stylesheet" href="../styles/views/build.css">
+<link rel="stylesheet" href="../styles/lab.css">
+<link rel="stylesheet" href="../styles/responsive.css">
 <style>
   /* The harness chrome. Deliberately not using app.css classes, so a broken
      stylesheet still leaves a readable report. */

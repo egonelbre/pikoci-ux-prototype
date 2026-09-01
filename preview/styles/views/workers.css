@@ -1,0 +1,15 @@
+/* Workers and worker telemetry: name-first column, disk gauge, week chart. */
+
+/* workers: first column is a name, not a status glyph */
+.wtbl td:first-child, .wtbl th:first-child { width: auto; text-align: left; white-space: nowrap; }
+/* worker detail: week chart */
+.wk-tick { font-size: 10px; fill: var(--mut); }
+.wk-lab { font-size: 10px; font-weight: 700; fill: var(--mut); text-transform: uppercase; letter-spacing: .05em; }
+.wk-step { font-size: 10px; font-weight: 700; }
+/* workers: disk gauge */
+.disk { display: inline-flex; gap: 6px; align-items: center; }
+.disk-bar { width: 64px; height: 6px; border-radius: 3px; background: var(--bg2); border: 1px solid var(--line2); overflow: hidden; display: inline-block; }
+.disk-bar span { display: block; height: 100%; }
+.wk-tick { fill: var(--faint-t); color: var(--faint-t); }
+/* Short all-caps labels need tracking; lowercase body text does not. */
+.wk-lab { letter-spacing: .08em; }

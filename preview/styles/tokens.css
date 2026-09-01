@@ -1,0 +1,66 @@
+/* Design tokens: the PICO-8-derived status palette, the light and dark
+   surfaces, and the font axis of the style lab.
+
+   Two families of status color. The plain ones (--ok, --bad, …) are the
+   brand values and are used as FILLS. The -t variants are the same colors
+   adjusted to clear 4.5:1 as TEXT on bg1/bg2 (WCAG 2.1) — run, warn and
+   pause all failed at 3:1 in the brand values. Never use a fill value for
+   text; styles/status.css maps the .c-* classes to the -t set. */
+
+:root {
+  --bg0: #faf8f6; --bg1: #ffffff; --bg2: #f2ede8;
+  --fg: #1f1a16; --mut: #7a7168; --mut3: #c8c2bc;
+  --line: #e4ddd6; --line2: #f0eae4; --edge: #b9b2ab;
+  --ok: #00A83A; --bad: #FF004D; --run: #FFA300; --pend: #83769C;
+  --cancel: #AB5236; --warn: #FA8072; --appr: #8e44ad; --pause: #29ADFF;
+  --link: #0b63c5; --accent: #1f6feb;
+  --log-bg: #14100d; --log-fg: #e8e2dc; --log-mut: #6b615a;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+[data-font="rounded"] {
+  --font-ui: "Nunito Sans", ui-rounded, "SF Pro Rounded", sans-serif;
+  --font-display: var(--font-ui);
+}
+[data-font="mono"] {
+  --font-ui: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--font-ui);
+}
+[data-font="accessible"] { --font-ui: "Atkinson Hyperlegible", Verdana, sans-serif; --font-display: var(--font-ui); }
+[data-font="space"] { --font-ui: "Space Grotesk", "Arial Nova", sans-serif; --font-display: var(--font-ui); }
+[data-font="serif"] { --font-ui: "IBM Plex Serif", ui-serif, Georgia, serif; --font-display: var(--font-ui); }
+[data-font="slab"] { --font-ui: "Roboto Slab", Rockwell, serif; --font-display: var(--font-ui); }
+[data-font="typewriter"] { --font-ui: "Courier Prime", "Courier New", monospace; --font-display: var(--font-ui); }
+[data-font="condensed"] { --font-ui: "Barlow Condensed", "Arial Narrow", sans-serif; --font-display: var(--font-ui); }
+[data-font="arcade"] { --font-ui: "Silkscreen", ui-monospace, monospace; --font-display: var(--font-ui); }
+[data-theme="dark"] {
+  --bg0: #16120f; --bg1: #1e1915; --bg2: #262019;
+  --fg: #ece6df; --mut: #a1968b; --mut3: #4a423b;
+  --line: #352d26; --line2: #2b241e; --edge: #5a5048;
+  --link: #6cb2ff; --accent: #4d8fee;
+  --log-bg: #0d0a08; --log-fg: #ddd6ce;
+}
+/* sparkline bars */
+:root { --spark: #b8bfc9; }
+[data-theme="dark"] { --spark: #4a5260; }
+
+/* fills keep the PICO-8 brand values; text usages get darkened/lightened
+   variants that clear 4.5:1 on bg1/bg2 (see review: run/warn/pause failed 3:1) */
+:root {
+  --ok-t: #00892F; --bad-t: #D60041; --run-t: #966000; --pend-t: #72658C;
+  --warn-t: #D31C07; --pause-t: #0070B5; --appr-t: var(--appr); --cancel-t: var(--cancel);
+  --faint-t: #746A60;
+}
+[data-theme="dark"] {
+  --ok-t: var(--ok); --bad-t: #FF306F; --run-t: var(--run); --pend-t: #8E82A5;
+  --warn-t: var(--warn); --pause-t: var(--pause); --appr-t: #AD6FC7; --cancel-t: #C96F53;
+  --faint-t: #948578;
+  --spark: #5C6677;
+}
+
+/* type scale: a subtle hierarchy over 14px body text */
+:root { --text-title: 20px; --text-heading: 16px; --text-label: 12.5px; }
+
+/* the waterfall label gutter, shared by the lane grid and its header */
+:root { --wf-lbl: clamp(170px, 30vw, 300px); }

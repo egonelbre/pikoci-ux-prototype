@@ -1,0 +1,24 @@
+/* The run waterfall: one lane per job, bars positioned in wall-clock. */
+
+/* waterfall */
+.wf { background: var(--bg1); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.wf-row { display: flex; align-items: center; height: 28px; gap: 10px; }
+.wf-lbl { width: var(--wf-lbl); flex: none; display: flex; gap: 7px; align-items: center; font-size: 13px; }
+.wf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-n { width: 40px; flex: none; text-align: right; }
+.wf-d { width: 52px; flex: none; text-align: right; white-space: nowrap; }
+.wf-lane { flex: 1; position: relative; height: 100%; border-left: 1px solid var(--line2); overflow: hidden; }
+.wf-bar { position: absolute; top: 7px; height: 14px; border-radius: 4px; cursor: pointer; min-width: 8px; }
+.wf-bar:hover { outline: 2px solid var(--fg); }
+.wf-dur { width: 64px; flex: none; text-align: right; }
+.wf-note { padding-top: 8px; }
+.wf-grid { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--line); }
+.wf-axis { height: 18px; }
+.wf-axis .wf-lane { border-left: none; }
+.wf-body { position: relative; }
+.wf-deps { position: absolute; top: -18px; left: calc(var(--wf-lbl) + 10px); right: 0; bottom: 0; pointer-events: none; }
+.wf-dep { position: absolute; border-left: 1.5px dashed var(--mut3); }
+.wf-link { width: 60px; flex: none; text-align: right; }
+.wf-lbl.click { cursor: pointer; }
+.wf-lbl.click:hover .wf-name { text-decoration: underline; }
+.wf-ghost { position: absolute; top: 5px; font-size: 12px; color: var(--mut); white-space: nowrap; border: 1px dashed var(--line); border-radius: 10px; padding: 0 8px; background: var(--bg1); max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }

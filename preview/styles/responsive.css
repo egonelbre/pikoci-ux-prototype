@@ -1,0 +1,10 @@
+/* Small screens. Loaded after everything it adjusts.
+   iOS zooms the page when an input under 16px takes focus, so the filter,
+   the team select and the palette hold 16px here. */
+
+/* iOS: inputs under 16px zoom the page on focus — hold 16px on small screens */
+@media (max-width: 640px) {
+  .ctoolbar [data-filter], .team-sel, .pal-box input { font-size: 16px; }
+  .style-pop { position: fixed; top: 54px; right: 10px; left: 10px; width: auto; max-height: calc(100vh - 64px); overflow-y: auto; }
+  .type-options, .skin-options { grid-template-columns: repeat(3, 1fr); }
+}

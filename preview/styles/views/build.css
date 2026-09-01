@@ -1,0 +1,65 @@
+/* The build page: two panes, the step list, the fixed status box. */
+
+/* PR detail: graph + checks side by side, wrapping when narrow */
+.pr-cols { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; margin-bottom: 12px; }
+.pr-cols .pr-graph { flex: 1 1 360px; min-width: 330px; }
+.pr-cols .pr-checks { flex: 1.4 1 460px; min-width: 380px; }
+.pr-cols .run-graph { height: 100%; box-sizing: border-box; margin-bottom: 0; }
+/* build page v3: two-pane run view */
+.b2-page { max-width: 1560px; padding-bottom: 16px; }
+.b2-head { flex-wrap: nowrap; align-items: flex-start; margin-bottom: 10px; }
+/* fixed box: ✓ / ✕ / ● / ⧖ have different glyph metrics (emoji substitution
+   on macOS) — without this the title shifts and the line box varies by status */
+.b2-sym { width: 26px; height: 26px; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; }
+.b2-titles { min-width: 0; }
+.b2-title { font-size: 17px; font-weight: 700; line-height: 26px; }
+.b2-titles .small { line-height: 22px; }
+.b2 { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 14px; height: calc(100vh - 148px); min-height: 340px; }
+.b2-side { overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); padding: 2px 0 10px; }
+.b2-log { overflow-y: auto; min-width: 0; padding-right: 2px; }
+.b2-log .log { max-height: none; }
+.b2-log .step:last-child { margin-bottom: 0; }
+.b2-sec { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--mut); padding: 12px 12px 4px; }
+.b2-grp { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--mut); padding: 6px 12px 2px 18px; }
+.jrow { display: flex; gap: 8px; align-items: center; padding: 4px 12px; font-size: 13px; color: var(--fg); text-decoration: none; cursor: pointer; }
+.jrow > span:first-child:not(.reason-wrap) { width: 16px; flex: none; text-align: center; }
+.jrow:hover { background: var(--bg2); }
+.jrow.on { background: var(--bg2); font-weight: 600; box-shadow: inset 3px 0 var(--accent); }
+.jrow .jname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jrow.dim { color: var(--mut); cursor: default; }
+.jrow.st { padding-left: 18px; }
+.b2-back { border-bottom: 1px solid var(--line2); padding-top: 8px; padding-bottom: 8px; color: var(--accent); }
+.b2-back .jname { color: var(--fg); }
+.jrow.st .type { width: 48px; flex: none; text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+.b2-hist { padding: 2px 12px 6px; font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; }
+.b2-det { padding: 6px 12px; font-size: 12px; color: var(--mut); border-top: 1px solid var(--line2); }
+.inline-det { border-top: none; padding: 8px 0; }
+.b2-det summary { cursor: pointer; font-weight: 600; }
+.b2-det .cmdline { margin: 6px 0; white-space: pre-wrap; word-break: break-all; }
+@media (max-width: 920px) {
+  .b2 { display: block; height: auto; }
+  .b2-side { max-height: 42vh; margin-bottom: 12px; }
+  .b2-log { overflow: visible; }
+  .b2-log .log { max-height: 420px; }
+}
+/* build page */
+.meta { margin: 4px 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+.appr-card { border: 1px solid color-mix(in srgb, var(--appr) 40%, var(--line)); background: color-mix(in srgb, var(--appr) 6%, var(--bg1)); border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+.warn-line { color: var(--bad); font-size: 13px; margin-top: 6px; }
+.err-first { border: 1px solid color-mix(in srgb, var(--bad) 40%, var(--line)); background: color-mix(in srgb, var(--bad) 5%, var(--bg1)); border-radius: 8px; margin: 12px 0; overflow: hidden; }
+.err-head { padding: 8px 12px; color: var(--bad); font-weight: 700; display: flex; gap: 10px; }
+.cmp { border: 1px solid var(--line); background: var(--bg1); border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+.step { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; background: var(--bg1); overflow: hidden; }
+.step-head { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; font: inherit; background: none; border: none; color: inherit; padding: 8px 12px; cursor: pointer; }
+.step-head:hover { background: var(--bg2); }
+.step-head .type { width: 46px; text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+.run-local { border: 1px dashed var(--line); border-radius: 8px; padding: 10px 14px; margin: 16px 0; }
+.cmdline { font-family: var(--font-mono); font-size: 12.5px; background: var(--bg2); border-radius: 6px; padding: 8px 10px; margin: 8px 0; overflow-x: auto; }
+/* step-jump rows in the sidebar are real buttons */
+/* step-jump rows are real buttons now */
+button.jrow { border: none; background: none; font: inherit; width: 100%; text-align: left; color: var(--fg); }
+/* Short all-caps labels need tracking; lowercase body text does not. */
+.b2-sec, .b2-grp, .jrow.st .type, .step-head .type { letter-spacing: .08em; }
+
+/* long identifiers (refs, branches, urls) break before escaping */
+.b2-det, .cmdline { overflow-wrap: break-word; }

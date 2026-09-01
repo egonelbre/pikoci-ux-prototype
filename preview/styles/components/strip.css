@@ -1,0 +1,16 @@
+/* The attention strip on Home, and its all-clear state. */
+
+/* attention strip */
+.strip { border: 1px solid color-mix(in srgb, var(--appr) 30%, var(--line)); background: color-mix(in srgb, var(--appr) 4%, var(--bg1)); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.strip-row { display: flex; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--line2); }
+.strip-row:last-child { border-bottom: none; }
+.strip-icon { width: 20px; font-size: 15px; text-align: center; }
+.strip-row.appr .strip-icon, .strip-row.held .strip-icon { color: var(--appr); }
+.strip-row.fail .strip-icon { color: var(--bad); }
+.strip-row.err .strip-icon { color: var(--warn); }
+.strip-row.stuck .strip-icon, .strip-row.overdue .strip-icon { color: var(--pend); }
+.strip-row.hatch .strip-icon { color: var(--pause); }
+.strip-body { flex: 1; min-width: 200px; }
+.strip-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.allclear { padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--ok) 35%, var(--line)); color: var(--ok); border-radius: 10px; margin-bottom: 10px; background: var(--bg1); }
+.not-shown { color: var(--mut); font-size: 12px; margin: 0 4px 14px; }

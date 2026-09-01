@@ -1,0 +1,13 @@
+/* Per-job status dots, and the per-test history dots (K23). */
+
+.dots { display: inline-flex; gap: 4px; align-items: center; }
+.dot { width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; }
+.dot.none { background: none; color: var(--mut3); width: auto; }
+.dot.sm { width: 13px; height: 13px; border-radius: 3px; font-size: 8px; }
+/* per-test history dots (K23) */
+.th-hist { display: inline-flex; gap: 3px; align-items: center; }
+.th-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.th-dot.pass { background: var(--ok); }
+.th-dot.fail { background: var(--bad); }
+.th-dot.skip { background: var(--pend); }
+.th-dot.none { width: auto; color: var(--faint-t); }

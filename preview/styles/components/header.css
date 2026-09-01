@@ -1,0 +1,19 @@
+/* The top bar: logo, team scope, nav, attention badge. */
+
+
+/* header */
+header { flex-wrap: wrap; row-gap: 4px; display: flex; align-items: center; gap: 14px; padding: 9px 18px; background: var(--bg1); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+header .logo { font-weight: 700; color: var(--fg); }
+.preview-tag { font-size: 10px; color: var(--mut); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; vertical-align: 2px; }
+header nav { display: flex; gap: 12px; font-size: 13px; }
+header nav a, header > a { color: var(--mut); }
+header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
+.attn-badge { background: var(--appr); color: #fff; border-radius: 10px; padding: 0 8px; font-size: 12px; }
+.ghost { border: none; background: none; color: var(--mut); cursor: pointer; font: inherit; }
+.ghost:hover { color: var(--fg); }
+/* team scope */
+.team-sel { font: inherit; font-size: 13px; background: var(--bg1); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; margin: 0 4px 0 10px; max-width: 130px; }
+.team-sel:focus-visible { border-color: var(--accent); }
+.team-head { font-size: 13px; font-weight: 600; color: var(--mut); margin: 20px 0 8px; display: flex; gap: 8px; align-items: baseline; }
+.team-head:first-child, h1 + .team-head { margin-top: 6px; }
+header nav { flex-wrap: wrap; }

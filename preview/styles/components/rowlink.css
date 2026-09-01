@@ -1,0 +1,6 @@
+/* A real link inside a clickable row — the keyboard path to every row
+   target, since a data-nav row is not focusable. */
+
+/* real links inside clickable rows (keyboard path to every row target) */
+.row-link { color: inherit; text-decoration: none; }
+.row-link:hover, .row-link:focus-visible { text-decoration: underline; }

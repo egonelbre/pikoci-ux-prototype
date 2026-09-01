@@ -1,0 +1,6 @@
+/* The transient status line lib/toast.js writes into. */
+
+/* toast */
+#toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(90px); background: var(--fg); color: var(--bg1); padding: 9px 16px; border-radius: 8px; font-size: 13px; transition: transform .2s; z-index: 99; max-width: 80vw; }
+#toast.show { transform: translateX(-50%) translateY(0); }
+#toast.info { background: var(--accent); color: #fff; }

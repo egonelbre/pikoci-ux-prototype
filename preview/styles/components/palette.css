@@ -1,0 +1,10 @@
+/* The Cmd-K command palette. */
+
+/* palette */
+.pal-back { position: fixed; inset: 0; background: rgba(10,8,6,.45); z-index: 60; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.pal-box { width: 540px; max-width: 92vw; background: var(--bg1); border-radius: 10px; box-shadow: 0 14px 44px rgba(0,0,0,.35); overflow: hidden; }
+.pal-box input { width: 100%; border: none; outline: none; font: inherit; font-size: 15px; padding: 13px 16px; border-bottom: 1px solid var(--line2); background: var(--bg1); color: var(--fg); }
+.pal-row { display: flex; gap: 10px; align-items: center; padding: 8px 16px; cursor: pointer; font-size: 13.5px; }
+.pal-row.sel { background: var(--bg2); }
+.pal-k { margin-left: auto; font-size: 11px; color: var(--mut3); }
+.pal-k { fill: var(--faint-t); color: var(--faint-t); }

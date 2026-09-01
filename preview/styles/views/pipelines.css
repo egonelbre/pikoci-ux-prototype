@@ -1,0 +1,17 @@
+/* The Pipelines table: weather glyph + duration sparkline. */
+
+/* pipelines table: weather + duration trend */
+.ptbl td { vertical-align: middle; }
+.tsub td { background: var(--bg2); color: var(--mut); font-size: 12px; font-weight: 600; padding: 4px 10px; cursor: default; }
+.tsub td:first-child { text-align: left; width: auto; } /* beats the .ctbl centered status column */
+.wx { display: inline-flex; gap: 2px; align-items: center; }
+.wx-g { font-size: 13px; margin-right: 4px; width: 18px; text-align: center; }
+.wx-t { display: inline-block; width: 5px; height: 12px; border-radius: 1.5px; }
+.wx a { display: inline-flex; }
+.spark-wrap { display: grid; grid-template-columns: 68px 5ch 1ch; gap: 6px; align-items: end; }
+.spark { display: inline-flex; justify-content: flex-end; gap: 2px; align-items: flex-end; width: 68px; height: 18px; }
+.spark .sb { display: inline-block; width: 5px; border-radius: 1px 1px 0 0; }
+.spark-dur { color: var(--mut); text-align: right; }
+.spark-drift { text-align: center; }
+/* contrast-corrected (WCAG 2.1) — see styles/tokens.css */
+.tsub td { color: var(--faint-t); }

@@ -1,0 +1,10 @@
+/* Reason chips. The detail opens as a popover so rows keep their shape. */
+
+/* reasons (focusable, two families) — detail opens as a popover so rows keep their shape */
+.reason-wrap { position: relative; display: inline-flex; }
+.reason { font: inherit; font-size: 11px; border: 1px dashed var(--mut3); background: var(--bg1); color: var(--mut); border-radius: 8px; padding: 0 7px; cursor: pointer; }
+.reason:focus { outline: 2px solid var(--accent); }
+.reason.wont_run { border-style: dotted; }
+.reason-detail { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: max-content; max-width: 340px;
+  font-size: 12px; color: var(--fg); background: var(--bg1); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 11px; box-shadow: 0 6px 20px rgba(0,0,0,.18); text-align: left; white-space: normal; }
