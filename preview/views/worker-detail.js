@@ -4,6 +4,7 @@
   'use strict';
   window.VIEWS = window.VIEWS || {};
   const { esc, fmtDur, ago } = PK.fmt;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Worker detail: cpu/disk overlaid, runs as bands ---------------
@@ -93,28 +94,46 @@
       <div class="pr-cols">
         <div style="flex:1.2 1 460px;min-width:300px">
           <h2>What moved the disk <span class="mut small">— runs in view, aggregated by job</span></h2>
-          <div class="tbl-scroll"><table class="tbl ctbl wtbl">
-            <thead><tr><th>job</th><th class="r">runs</th><th class="r">time</th><th class="r">disk Δ</th><th width="130"></th></tr></thead>
-            ${rows.map(r => `<tr>
-              <td class="nowrap">${esc(r.key)}</td>
-              <td class="r">${r.runs}</td>
-              <td class="mut small r nowrap">${fmtDur(r.mins * 60)}</td>
-              <td class="r nowrap ${r.dDisk >= 0.02 ? 'c-failed' : r.dDisk < 0 ? 'c-succeeded' : 'mut'}">${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%</td>
-              <td><span class="disk-bar" style="width:110px"><span style="width:${Math.round(Math.abs(r.dDisk) / maxAbs * 100)}%;background:${r.dDisk < 0 ? 'var(--ok, #2a2)' : r.dDisk >= 0.02 ? 'var(--warn, #d33)' : 'var(--spark)'}"></span></span></td>
-            </tr>`).join('')}
-          </table></div>
+          ${dataTable({
+        className: 'wtbl',
+        cols: [
+          { label: 'job', width: 'fill' },
+          { label: 'runs', width: 'content', align: 'right' },
+          { label: 'time', width: 'content', align: 'right', cls: 'mut small' },
+          { label: 'disk Δ', width: 'content', align: 'right' },
+          { width: 'content' },
+        ],
+        rows: rows.map(r => ({ cells: [
+          esc(r.key), r.runs, fmtDur(r.mins * 60),
+          { h: `${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%`,
+            cls: r.dDisk >= 0.02 ? 'c-failed' : r.dDisk < 0 ? 'c-succeeded' : 'mut' },
+          `<span class="disk-bar" style="width:110px"><span style="width:${Math.round(Math.abs(r.dDisk) / maxAbs * 100)}%;background:${r.dDisk < 0 ? 'var(--ok, #2a2)' : r.dDisk >= 0.02 ? 'var(--warn, #d33)' : 'var(--spark)'}"></span></span>`,
+        ] })),
+      })}
           <p class="mut small">This is the disk-leak answer: a job whose Δ dominates the week is the thing to cache-cap or prune. Deltas come from before/after sampling around each run — cheap, no per-file accounting.</p>
         </div>
         <div style="flex:1 1 380px;min-width:300px">
           <h2>Runs in view</h2>
-          <div class="tbl-scroll"><table class="tbl ctbl wtbl">
-            ${runsF.map((r, i) => ({ r, i })).sort((a, b) => a.r.agoH - b.r.agoH).slice(0, 14).map(({ r, i }) => `<tr onmouseenter="_wkHi(${i},1)" onmouseleave="_wkHi(${i},0)" ${r.bid ? `onclick="location.hash='#/b/${r.bid}'"` : 'style="cursor:default"'}>
-              <td class="mut small nowrap">${r.agoH}h ago</td>
-              <td class="nowrap">${esc(r.pipeline)}/${esc(r.job)}${r.n ? ` <span class="mut small">#${r.n}</span>` : ''}</td>
-              <td class="mut small r nowrap">${r.durM}m</td>
-              <td class="mut small r nowrap">${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%</td>
-            </tr>`).join('')}
-          </table></div>
+          ${dataTable({
+        className: 'wtbl',
+        cols: [
+          { width: 'content', cls: 'mut small' },
+          { width: 'fill' },
+          { width: 'content', align: 'right', cls: 'mut small' },
+          { width: 'content', align: 'right', cls: 'mut small' },
+        ],
+        rows: runsF.map((r, i) => ({ r, i })).sort((a, b) => a.r.agoH - b.r.agoH).slice(0, 14).map(({ r, i }) => ({
+          nav: r.bid ? `#/b/${r.bid}` : null,
+          // hovering the row lights its band on the chart above
+          attrs: `onmouseenter="_wkHi(${i},1)" onmouseleave="_wkHi(${i},0)"${r.bid ? '' : ' style="cursor:default"'}`,
+          cells: [
+            `${r.agoH}h ago`,
+            `${esc(r.pipeline)}/${esc(r.job)}${r.n ? ` <span class="mut small">#${r.n}</span>` : ''}`,
+            `${r.durM}m`,
+            `${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%`,
+          ],
+        })),
+      })}
         </div>
       </div>` : '<div class="mut pad">No telemetry yet — this instance has not reported a full sample window.</div>'}
     </div>`;

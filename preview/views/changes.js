@@ -6,6 +6,7 @@
   window.VIEWS = window.VIEWS || {};
   const { esc, ago } = PK.fmt;
   const { st } = PK.status;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Changes: dense table (built for 100s of open PRs) -------------
@@ -49,36 +50,46 @@
         <span class="sp"></span>
         <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${PK.model.team() ? ' in ' + esc(PK.model.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl fixed">
-        <colgroup><col style="width:30px"><col><col style="width:92px"><col style="width:114px"><col style="width:188px"><col style="width:132px"><col style="width:84px"></colgroup>
-        <thead><tr><th></th><th>PR</th><th>repo</th><th>author</th><th>branch @ head</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
-        <tbody>
-        ${shown.map(l => {
-        const lpl = PK.model.lineagePl(l);
-        const jobNames = lpl.jobs.map(j => j.name);
-        const head = PK.model.lineageHead(l);
-        const s = PK.model.lineageStatus(l);
-        const isHeld = held(l);
-        const old = l.changes.filter(c => c.superseded).length;
-        return `<tr class="${PK.model.mine(l) ? 'mine-row' : ''}" onclick="location.hash='#/changes/pr/${l.n}'">
-          <td class="c-${isHeld ? 'held' : s} ${s === 'started' ? 'pulse' : ''}">${isHeld ? '⛔' : st(s).sym}</td>
-          <td class="ct-title" title="${esc(l.title)}"><div class="ctt">
-            <a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
-            ${l.draft ? '<span class="chip">draft</span>' : ''}${l.fork ? '<span class="chip">fork</span>' : ''}
-            ${isHeld ? '<span class="badge held-badge">held</span>' : ''}
-            ${old ? `<span class="chip" title="superseded commits — builds auto-cancelled within this lineage">+${old} superseded</span>` : ''}
-            ${l.forge ? `<a class="mut small" href="${esc(l.forge.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="open on ${esc(l.forge.kind)}">↗</a>` : ''}</div></td>
-          <td class="mut small nowrap" title="${esc(lpl.team)}/${esc(lpl.name)}">${esc(lpl.name.replace(/-pr$/, ''))}</td>
-          <td class="mut nowrap">${PK.model.mine(l) ? `<span class="you-mark" title="your PR" aria-label="your PR">★</span> ` : ''}${esc(l.author)}</td>
-          <td class="nowrap"><code class="trunc-code" title="${esc(l.branch)}">${esc(l.branch)}</code> <code>${esc(head.id.ref)}</code></td>
-          <td class="r nowrap"><span class="dots" onclick="event.stopPropagation()">
-            ${l.summary ? l.summary.map((sst, i) => VIEWS.dotStatic(sst, jobNames[i] || 'check')).join('')
-          : lpl.jobs.map(j => VIEWS.jobDot(lpl, j.name, head.id.ref)).join('')}</span></td>
-          <td class="mut small r nowrap">${ago(l.updated)}</td>
-        </tr>`;
-      }).join('')}
-        </tbody>
-      </table></div>`;
+      ${dataTable({
+        layout: 'fixed',
+        cols: [
+          { width: 'icon', px: '30px' },
+          { label: 'PR', width: 'title' },
+          { label: 'repo', width: 'content', px: '92px', cls: 'mut small' },
+          { label: 'author', width: 'content', px: '114px', cls: 'mut' },
+          { label: 'branch @ head', width: 'content', px: '188px' },
+          { label: 'checks', width: 'content', px: '132px', align: 'right' },
+          { label: 'updated', width: 'content', px: '84px', align: 'right', cls: 'mut small' },
+        ],
+        rows: shown.map(l => {
+          const lpl = PK.model.lineagePl(l);
+          const jobNames = lpl.jobs.map(j => j.name);
+          const head = PK.model.lineageHead(l);
+          const s = PK.model.lineageStatus(l);
+          const isHeld = held(l);
+          const old = l.changes.filter(c => c.superseded).length;
+          return {
+            nav: `#/changes/pr/${l.n}`,
+            cls: PK.model.mine(l) ? 'mine-row' : null,
+            cells: [
+              { h: isHeld ? '⛔' : st(s).sym, cls: `c-${isHeld ? 'held' : s} ${s === 'started' ? 'pulse' : ''}` },
+              { h: `<a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
+              ${l.draft ? '<span class="chip">draft</span>' : ''}${l.fork ? '<span class="chip">fork</span>' : ''}
+              ${isHeld ? '<span class="badge held-badge">held</span>' : ''}
+              ${old ? `<span class="chip" title="superseded commits — builds auto-cancelled within this lineage">+${old} superseded</span>` : ''}
+              ${l.forge ? `<a class="mut small" href="${esc(l.forge.url)}" target="_blank" rel="noopener" title="open on ${esc(l.forge.kind)}">↗</a>` : ''}`,
+                title: l.title },
+              { h: esc(lpl.name.replace(/-pr$/, '')), title: `${lpl.team}/${lpl.name}` },
+              `${PK.model.mine(l) ? '<span class="you-mark" title="your PR" aria-label="your PR">★</span> ' : ''}${esc(l.author)}`,
+              `<code class="trunc-code" title="${esc(l.branch)}">${esc(l.branch)}</code> <code>${esc(head.id.ref)}</code>`,
+              `<span class="dots">${l.summary
+                ? l.summary.map((sst, i) => VIEWS.dotStatic(sst, jobNames[i] || 'check')).join('')
+                : lpl.jobs.map(j => VIEWS.jobDot(lpl, j.name, head.id.ref)).join('')}</span>`,
+              ago(l.updated),
+            ],
+          };
+        }),
+      })}`;
     } else if (tab === 'repos') {
       if (prN) return VIEWS.branchFeed(prN);
       // The branch surface at company scale (50 repos × 100 releases + 30
@@ -121,45 +132,69 @@
       const brRow = r => {
         const href = '#/changes/repos/' + encodeURIComponent(r.name);
         const head = r.pl ? null : r.commits[0];
-        return `<tr onclick="location.hash='${href}'">
-          <td class="c-${r.status} ${r.status === 'started' ? 'pulse' : ''} nowrap">${st(r.status).sym}</td>
-          <td class="nowrap"><div class="ctt"><a class="row-link" href="${href}"><code>${esc(r.branch)}</code></a>${r.note ? ` <span class="mut small">${esc(r.note)}</span>` : ''}</div></td>
-          <td class="mut small"><div class="ctt"><span class="shrink">${esc(r.headMsg || (head ? head.msg : ''))}</span></div></td>
-          <td class="mut small nowrap">${esc(r.headAuthor || (head ? head.author : ''))}</td>
-          <td class="r nowrap"><span class="dots">${r.pl
-            ? r.pl.jobs.filter(PK.model.isRunJob).slice(0, 5).map(j => VIEWS.jobDot(r.pl, j.name, r.headRef)).join('')
-            : head.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span></td>
-          <td class="mut small r nowrap">${ago(r.lastAt)}</td></tr>`;
+        return {
+          nav: href,
+          cells: [
+            { h: st(r.status).sym, cls: `c-${r.status} ${r.status === 'started' ? 'pulse' : ''}` },
+            `<a class="row-link" href="${href}"><code>${esc(r.branch)}</code></a>${r.note ? ` <span class="mut small">${esc(r.note)}</span>` : ''}`,
+            esc(r.headMsg || (head ? head.msg : '')),
+            esc(r.headAuthor || (head ? head.author : '')),
+            `<span class="dots">${r.pl
+              ? r.pl.jobs.filter(PK.model.isRunJob).slice(0, 5).map(j => VIEWS.jobDot(r.pl, j.name, r.headRef)).join('')
+              : head.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span>`,
+            ago(r.lastAt),
+          ],
+        };
       };
-      // same display as Pipelines: ONE table, a tsub header row per repo
+      // same display as Pipelines: ONE table, a group header row per repo
       // (roll-up: worst status, counts, red branches named), branch rows under
-      const grp = x => `<tr class="tsub"><td colspan="6"><span class="c-${x.worst} ${x.worst === 'started' ? 'pulse' : ''}">${st(x.worst).sym}</span> <b>${esc(x.repo)}</b>
-          <span class="mut">· ${esc(x.team)} · ${x.g.length} branch${x.g.length === 1 ? '' : 'es'}${x.active !== x.g.length ? `, ${x.active} active` : ''}${x.red.length ? ` · <b class="c-failed">${x.red.length} red:</b> ${x.red.slice(0, 3).map(r => `<code>${esc(r.branch)}</code>`).join(' ')}${x.red.length > 3 ? ` +${x.red.length - 3}` : ''}` : ''} · ${ago(x.lastAt)}</span></td></tr>
-        ${x.sorted.slice(0, CAPB).map(brRow).join('')}
-        ${x.sorted.length > CAPB ? `<tr><td></td><td colspan="5" class="mut small">first ${CAPB} of ${x.sorted.length} branches — narrow with the filter</td></tr>` : ''}`;
+      const brRows = [];
+      for (const x of glist) {
+        brRows.push({ group: `<span class="c-${x.worst} ${x.worst === 'started' ? 'pulse' : ''}">${st(x.worst).sym}</span> <b>${esc(x.repo)}</b>
+          <span class="mut">· ${esc(x.team)} · ${x.g.length} branch${x.g.length === 1 ? '' : 'es'}${x.active !== x.g.length ? `, ${x.active} active` : ''}${x.red.length ? ` · <b class="c-failed">${x.red.length} red:</b> ${x.red.slice(0, 3).map(r => `<code>${esc(r.branch)}</code>`).join(' ')}${x.red.length > 3 ? ` +${x.red.length - 3}` : ''}` : ''} · ${ago(x.lastAt)}</span>` });
+        x.sorted.slice(0, CAPB).forEach(r => brRows.push(brRow(r)));
+        if (x.sorted.length > CAPB) brRows.push({ raw: `<tr><td></td><td colspan="5" class="mut small">first ${CAPB} of ${x.sorted.length} branches — narrow with the filter</td></tr>` });
+      }
       body = `<div class="ctoolbar">
           <input data-filter aria-label="filter repos and branches" placeholder="filter repo, branch…  ( / )" value="${esc(brFilter)}" oninput="_brF(this.value)">
           ${C('active', 'active')}${C('attention', '✕ needs attention')}${C('all', 'all')}
           <span class="sp"></span>
           <span class="mut small">${glist.length} repos · ${shownBranches} of ${rows.length} branches${!q && brChip === 'active' ? ' · quiet (no commit in 30d) hidden' : ''}</span>
         </div>
-        ${glist.length ? `<div class="tbl-scroll"><table class="tbl ctbl fixed">
-        <colgroup><col style="width:30px"><col style="width:220px"><col><col style="width:110px"><col style="width:96px"><col style="width:84px"></colgroup>
-        <thead><tr><th></th><th>branch</th><th>last commit</th><th>author</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
-        <tbody>${glist.map(grp).join('')}</tbody></table></div>`
-          : '<div class="mut pad">Nothing matches. Clear the filter or switch chips.</div>'}
+        ${glist.length ? dataTable({
+        layout: 'fixed',
+        cols: [
+          { width: 'icon', px: '30px' },
+          { label: 'branch', width: 'content', px: '220px' },
+          { label: 'last commit', width: 'title', cls: 'mut small' },
+          { label: 'author', width: 'content', px: '110px', cls: 'mut small' },
+          { label: 'checks', width: 'content', px: '96px', align: 'right' },
+          { label: 'updated', width: 'content', px: '84px', align: 'right', cls: 'mut small' },
+        ],
+        rows: brRows,
+      }) : '<div class="mut pad">Nothing matches. Clear the filter or switch chips.</div>'}
         <p class="mut small">Every watched branch is its own pipeline (a git resource tracks one ref). Feature branches don't live here — they arrive as PRs.</p>`;
     } else if (tab === 'scheduled') {
       const pl = PK.model.getPipeline('hello-world');
       if (!PK.model.inTeam(pl)) return `<div class="page">
         <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('repos', 'Repos')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
-      body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
-        ${pl.resources[0].versions.concat([{ id: { ref: new Date(D().now - 30 * 60e3).toISOString().slice(0, 16) + 'Z' }, meta: { at: D().now - 30 * 60e3 } }]).map(v => `<tr>
-          <td>⏱</td><td class="ct-title"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="mut shrink">cron.every-10m · oss/hello-world</span></div></td>
-          <td></td><td class="r"><span class="dots">${VIEWS.jobDot(pl, 'gen', v.id.ref)}</span></td>
-          <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`).join('')}
-      </tbody></table></div>`;
+      body = dataTable({
+        cols: [
+          { width: 'icon' },
+          { width: 'title' },
+          { width: 'content', align: 'right' },
+          { width: 'content', align: 'right', cls: 'mut small' },
+        ],
+        rows: pl.resources[0].versions
+          .concat([{ id: { ref: new Date(D().now - 30 * 60e3).toISOString().slice(0, 16) + 'Z' }, meta: { at: D().now - 30 * 60e3 } }])
+          .map(v => ({ cells: [
+            '⏱',
+            `<code>${esc(v.id.ref)}</code><span class="mut shrink">cron.every-10m · oss/hello-world</span>`,
+            `<span class="dots">${VIEWS.jobDot(pl, 'gen', v.id.ref)}</span>`,
+            ago(v.meta.at),
+          ] })),
+      });
     }
 
     return `<div class="page">

@@ -4,6 +4,7 @@
   'use strict';
   window.VIEWS = window.VIEWS || {};
   const { esc, fmtDur } = PK.fmt;
+  const { dataTable } = PK.ui;
 
   // ---------- structured checks + measurements on the build page ------------
   // Tests as objects, not grepped log lines (G2): stable ids give per-test
@@ -28,20 +29,34 @@
         return `<span class="ctx-l${n !== null && n === t.ctx.hl ? ' hl' : ''}">${n !== null ? `<span class="ctx-n">${n}</span>` : ''}${esc(l)}</span>`;
       }).join('')}</pre></td></tr>`;
       out += `<h3>Checks <span class="mut small">— ${stats.pass} passed${stats.fail ? ` · <b class="c-failed">${stats.fail} failed</b>` : ''}${stats.skip ? ` · ${stats.skip} skipped` : ''} · ${fmtDur(stats.dur)} test time</span></h3>`;
-      if (failed.length) out += `<div class="tbl-scroll"><table class="tbl ctbl wtbl">
-        ${failed.map(t => {
-        const isNew = PK.model.isNewFailure(pl, b.job, b, t.id);
-        const hist = PK.model.testHistory(pl, b.job, b, t.id);
-        return `<tr>
-          <td class="c-failed nowrap">✕</td>
-          <td class="nowrap"><code>${esc(t.id)}</code>
-            ${isNew ? '<span class="chip mine-chip" title="passed in every earlier run with a report">new</span>'
-            : '<span class="chip" title="also failed in an earlier run">still failing</span>'}</td>
-          <td class="mut small">${esc(t.msg || '')}</td>
-          <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td>
-          <td class="r nowrap"><span class="th-hist" title="this test across the last runs with reports">${hist.map(histDot).join('')}</span></td>
-        </tr>${ctxRow(t)}`;
-      }).join('')}</table></div>`;
+      if (failed.length) {
+        const rows = [];
+        for (const t of failed) {
+          const isNew = PK.model.isNewFailure(pl, b.job, b, t.id);
+          const hist = PK.model.testHistory(pl, b.job, b, t.id);
+          rows.push({ cells: [
+            { h: '✕', cls: 'c-failed' },
+            `<code>${esc(t.id)}</code> ${isNew
+              ? '<span class="chip mine-chip" title="passed in every earlier run with a report">new</span>'
+              : '<span class="chip" title="also failed in an earlier run">still failing</span>'}`,
+            esc(t.msg || ''),
+            t.d ? t.d + 's' : '',
+            `<span class="th-hist" title="this test across the last runs with reports">${hist.map(histDot).join('')}</span>`,
+          ] });
+          if (t.ctx) rows.push({ raw: ctxRow(t) });
+        }
+        out += dataTable({
+          className: 'wtbl',
+          cols: [
+            { width: 'icon' },
+            { width: 'content' },
+            { width: 'fill', cls: 'mut small' },
+            { width: 'content', align: 'right', cls: 'mut small' },
+            { width: 'content', align: 'right' },
+          ],
+          rows,
+        });
+      }
       if (skipped.length) out += skipped.map(t => `<div class="mut small pad-s">◇ <code>${esc(t.id)}</code> skipped${t.msg ? ` — ${esc(t.msg)}` : ''}</div>`).join('');
       // scale: suites run to 8000 tests across 100 packages. Failures stay a
       // flat list (the rare set); everything else rolls up per package,
@@ -53,13 +68,21 @@
         <span class="sp"></span><span class="mut small">${b.tests.length} tests</span></div>`;
       if (q) {
         const hits = b.tests.filter(t => t.id.toLowerCase().includes(q));
-        out += hits.length ? `<div class="tbl-scroll"><table class="tbl ctbl fixed">
-          <colgroup><col style="width:28px"><col style="width:340px"><col><col style="width:76px"></colgroup>
-          ${hits.slice(0, 100).map(t => `<tr>
-            <td class="c-${t.s === 'fail' ? 'failed' : t.s === 'skip' ? 'pending' : 'succeeded'} nowrap">${t.s === 'fail' ? '✕' : t.s === 'skip' ? '◇' : '✓'}</td>
-            <td class="nowrap"><code>${esc(t.id)}</code></td>
-            <td class="mut small">${esc(t.msg || '')}</td>
-            <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div>${hits.length > 100 ? `<div class="mut small pad-s">first 100 of ${hits.length} matches</div>` : ''}`
+        out += hits.length ? dataTable({
+          layout: 'fixed',
+          cols: [
+            { width: 'icon', px: '28px' },
+            { width: 'content', px: '340px' },
+            { width: 'fill', cls: 'mut small' },
+            { width: 'content', px: '76px', align: 'right', cls: 'mut small' },
+          ],
+          rows: hits.slice(0, 100).map(t => ({ cells: [
+            { h: t.s === 'fail' ? '✕' : t.s === 'skip' ? '◇' : '✓', cls: `c-${t.s === 'fail' ? 'failed' : t.s === 'skip' ? 'pending' : 'succeeded'}` },
+            `<code>${esc(t.id)}</code>`,
+            esc(t.msg || ''),
+            t.d ? t.d + 's' : '',
+          ] })),
+        }) + (hits.length > 100 ? `<div class="mut small pad-s">first 100 of ${hits.length} matches</div>` : '')
           : '<div class="mut pad-s small">no test matches</div>';
       } else {
         const pkgs = {};
@@ -71,27 +94,42 @@
         out += Object.entries(pkgs).sort((a, c) => c[1].dur - a[1].dur).map(([p, g]) =>
           `<details class="b2-det inline-det pkg" data-det="tp:${b.id}:${esc(p)}"><summary><code>${esc(p)}</code>
             <span class="mut small">${g.n} ✓ · ${fmtDur(g.dur)}</span></summary>
-          <div class="tbl-scroll"><table class="tbl ctbl fixed">
-          <colgroup><col style="width:28px"><col><col style="width:76px"></colgroup>
-          ${g.tests.sort((a, c) => (c.d || 0) - (a.d || 0)).map(t => `<tr>
-            <td class="c-succeeded nowrap">✓</td><td class="nowrap"><code>${esc(t.id)}</code></td>
-            <td class="mut small r nowrap">${t.d ? t.d + 's' : ''}</td></tr>`).join('')}</table></div></details>`).join('');
+          ${dataTable({
+            layout: 'fixed',
+            cols: [
+              { width: 'icon', px: '28px' },
+              { width: 'title' },
+              { width: 'content', px: '76px', align: 'right', cls: 'mut small' },
+            ],
+            rows: g.tests.sort((a, c) => (c.d || 0) - (a.d || 0)).map(t => ({ cells: [
+              { h: '✓', cls: 'c-succeeded' }, `<code>${esc(t.id)}</code>`, t.d ? t.d + 's' : '',
+            ] })),
+          })}</details>`).join('');
       }
     }
     if (b.measurements) {
       out += `<h3>Measurements <span class="mut small">— values, not verdicts; deltas are vs this job's last green run</span></h3>
-      <div class="tbl-scroll"><table class="tbl ctbl wtbl">
-      ${b.measurements.map(m => {
-        const d = PK.model.measurementDelta(pl, b, m);
-        const worse = d && (m.better === 'lower' ? d.pct > 0 : d.pct < 0);
-        const sig = d && Math.abs(d.pct) >= 2;
-        return `<tr>
-          <td class="nowrap"><code>${esc(m.id)}</code></td>
-          <td class="r nowrap"><b>${m.value}</b> <span class="mut small">${esc(m.unit)}</span></td>
-          <td class="mut small nowrap">${d ? `was ${d.prev} ${esc(m.unit)}` : ''}</td>
-          <td class="r nowrap ${sig ? (worse ? 'c-failed' : 'c-succeeded') : 'mut'}">${d ? `${d.pct >= 0 ? '+' : ''}${d.pct.toFixed(1)}%${sig ? (worse ? ' ▲' : ' ▼') : ''}` : '<span class="mut small">no baseline</span>'}</td>
-        </tr>`;
-      }).join('')}</table></div>`;
+      ${dataTable({
+        className: 'wtbl',
+        cols: [
+          { width: 'fill' },
+          { width: 'content', align: 'right' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'content', align: 'right' },
+        ],
+        rows: b.measurements.map(m => {
+          const d = PK.model.measurementDelta(pl, b, m);
+          const worse = d && (m.better === 'lower' ? d.pct > 0 : d.pct < 0);
+          const sig = d && Math.abs(d.pct) >= 2;
+          return { cells: [
+            `<code>${esc(m.id)}</code>`,
+            `<b>${m.value}</b> <span class="mut small">${esc(m.unit)}</span>`,
+            d ? `was ${d.prev} ${esc(m.unit)}` : '',
+            { h: d ? `${d.pct >= 0 ? '+' : ''}${d.pct.toFixed(1)}%${sig ? (worse ? ' ▲' : ' ▼') : ''}` : '<span class="mut small">no baseline</span>',
+              cls: sig ? (worse ? 'c-failed' : 'c-succeeded') : 'mut' },
+          ] };
+        }),
+      })}`;
     }
     return out;
   };

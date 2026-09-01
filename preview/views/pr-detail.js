@@ -5,6 +5,7 @@
   window.VIEWS = window.VIEWS || {};
   const { esc, fmtDur, ago, bDur } = PK.fmt;
   const { st, reasonLabel } = PK.status;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- PR detail: verdict → evidence → anatomy -----------------------
@@ -75,19 +76,31 @@
         — every row below is scoped to this one commit</div>
       ${prVerdict(l, pl, head, held)}
       ${l.summary && !D().builds.some(b => b.pipeline === pl.name && Object.values(b.intent.versions)[0] === head.id.ref)
-        ? `<div class="tbl-scroll"><table class="tbl ctbl">${pl.jobs.filter(PK.model.isRunJob).map((j, i) => `<tr>
-            <td width="26">${VIEWS.dotStatic(l.summary[i] || 'none', j.name)}</td>
-            <td><b>${esc(j.name)}</b></td>
-            <td class="mut small r">${st(l.summary[i] || 'none').label}</td>
-          </tr>`).join('')}</table></div>`
+        ? dataTable({
+          cols: [{ width: 'icon' }, { width: 'fill' }, { width: 'content', align: 'right', cls: 'mut small' }],
+          rows: pl.jobs.filter(PK.model.isRunJob).map((j, i) => ({ cells: [
+            VIEWS.dotStatic(l.summary[i] || 'none', j.name),
+            `<b>${esc(j.name)}</b>`,
+            st(l.summary[i] || 'none').label,
+          ] })),
+        })
         : VIEWS.runTimeline(pl, head.id.ref)}
       ${arts.length ? `<h3>Artifacts <span class="mut small">— produced by this commit's builds</span></h3>
-        <div class="tbl-scroll"><table class="tbl ctbl wtbl">${arts.flatMap(b => b.artifacts.map(a => `<tr>
-          <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a></td>
-          <td class="mut small nowrap">${esc(a.size)}</td>
-          <td class="mut small">from <a href="#/b/${b.id}">${esc(b.job)} #${b.n}</a></td>
-          <td class="mut small r">worker-local · retention pending</td>
-        </tr>`)).join('')}</table></div>` : ''}
+        ${dataTable({
+        className: 'wtbl',
+        cols: [
+          { width: 'content' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'fill', cls: 'mut small' },
+          { width: 'content', align: 'right', cls: 'mut small' },
+        ],
+        rows: arts.flatMap(b => b.artifacts.map(a => ({ cells: [
+          `📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a>`,
+          esc(a.size),
+          `from <a href="#/b/${b.id}">${esc(b.job)} #${b.n}</a>`,
+          'worker-local · retention pending',
+        ] }))),
+      })}` : ''}
       <details class="b2-det inline-det" data-det="prg:${l.n}" open><summary>pipeline graph</summary>
         ${VIEWS.runGraph(pl, head.id.ref)}</details>
       ${l.changes.filter(c => c.superseded).length ? `<h3>Superseded commits</h3>

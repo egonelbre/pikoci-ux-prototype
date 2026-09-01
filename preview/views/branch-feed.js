@@ -4,6 +4,7 @@
   window.VIEWS = window.VIEWS || {};
   const { esc, ago } = PK.fmt;
   const { st } = PK.status;
+  const { dataTable } = PK.ui;
 
   // ---------- Branch feed: one branch pipeline's commit history -------------
   VIEWS.branchFeed = function (name) {
@@ -21,26 +22,35 @@
           const c = PK.model.jobCell(r.pl, j.name, v.id.ref);
           if (c.kind === 'build' && PK.status.RANK[c.status] < PK.status.RANK[worst]) worst = c.status;
         }
-        return `<tr>
-          <td class="c-${worst} ${worst === 'started' ? 'pulse' : ''}">${st(worst).sym}</td>
-          <td class="ct-title" title="${esc(v.meta.msg || '')}"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="shrink">${esc(v.meta.msg || '')}</span></div></td>
-          <td class="mut nowrap">${esc(v.meta.author || '')}</td>
-          <td class="r nowrap"><span class="dots">${r.pl.jobs.filter(PK.model.isRunJob).map(j => VIEWS.jobDot(r.pl, j.name, v.id.ref)).join('')}</span></td>
-          <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`;
-      }).join('');
+        return { cells: [
+          { h: st(worst).sym, cls: `c-${worst} ${worst === 'started' ? 'pulse' : ''}` },
+          { h: `<code>${esc(v.id.ref)}</code><span class="shrink">${esc(v.meta.msg || '')}</span>`, title: v.meta.msg || '' },
+          esc(v.meta.author || ''),
+          `<span class="dots">${r.pl.jobs.filter(PK.model.isRunJob).map(j => VIEWS.jobDot(r.pl, j.name, v.id.ref)).join('')}</span>`,
+          ago(v.meta.at),
+        ] };
+      });
     } else {
-      feed = r.commits.map(c => `<tr>
-        <td class="c-${r.status}">${st(r.status).sym}</td>
-        <td class="ct-title"><div class="ctt"><code>${esc(c.ref)}</code><span class="shrink">${esc(c.msg)}</span></div></td>
-        <td class="mut nowrap">${esc(c.author)}</td>
-        <td class="r nowrap"><span class="dots">${c.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span></td>
-        <td class="mut small r nowrap">${ago(c.at)}</td></tr>`).join('');
+      feed = r.commits.map(c => ({ cells: [
+        { h: st(r.status).sym, cls: `c-${r.status}` },
+        `<code>${esc(c.ref)}</code><span class="shrink">${esc(c.msg)}</span>`,
+        esc(c.author),
+        `<span class="dots">${c.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span>`,
+        ago(c.at),
+      ] }));
     }
     return `<div class="page">${tabs}
       <div class="meta"><a href="#/changes/repos">← repos</a> · <b>${esc(r.team)}/${esc(r.repo)}</b>
         · branch <code>${esc(r.branch)}</code>${r.pl ? ` · <a href="#/p/${esc(r.pl.name)}/graph">pipeline →</a>` : ' · <span class="mut small">summary-only demo row — rich history exists for the hand-built branches</span>'}</div>
-      <div class="tbl-scroll"><table class="tbl ctbl">
-      <thead><tr><th></th><th>commit</th><th>author</th><th class="r">checks</th><th class="r">when</th></tr></thead>
-      <tbody>${feed}</tbody></table></div></div>`;
+      ${dataTable({
+      cols: [
+        { width: 'icon' },
+        { label: 'commit', width: 'title' },
+        { label: 'author', width: 'content', cls: 'mut' },
+        { label: 'checks', width: 'content', align: 'right' },
+        { label: 'when', width: 'content', align: 'right', cls: 'mut small' },
+      ],
+      rows: feed,
+    })}</div>`;
   };
 })(window.PK);

@@ -6,6 +6,7 @@
   const { esc, fmtDur, ago, bDur } = PK.fmt;
   const { st } = PK.status;
   const { layers } = PK.graph;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Build page v3: two-pane run view ------------------------------
@@ -164,14 +165,21 @@
           </div>`).join('')}
           </div>
           ${b.artifacts && b.artifacts.length ? `<h3>Outputs</h3>
-          <div class="tbl-scroll"><table class="tbl ctbl wtbl">
-          ${b.artifacts.map(a => `<tr>
-            <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a></td>
-            <td class="mut small nowrap">${esc(a.size)}</td>
-            <td class="mut small nowrap">${a.sha ? `sha256 <code>${esc(a.sha)}…</code>` : ''}</td>
-            <td class="mut small">${a.dest ? `→ ${esc(a.dest)}` : '<span class="mut">worker-local · retention pending</span>'}</td>
-          </tr>`).join('')}
-          </table></div>` : ''}
+          ${dataTable({
+        className: 'wtbl',
+        cols: [
+          { width: 'content' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'fill', cls: 'mut small' },
+        ],
+        rows: b.artifacts.map(a => ({ cells: [
+          `📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a>`,
+          esc(a.size),
+          a.sha ? `sha256 <code>${esc(a.sha)}…</code>` : '',
+          a.dest ? `→ ${esc(a.dest)}` : '<span class="mut">worker-local · retention pending</span>',
+        ] })),
+      })}` : ''}
         </main>
       </div>
     </div>`;

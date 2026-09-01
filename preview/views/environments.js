@@ -3,6 +3,7 @@
   'use strict';
   window.VIEWS = window.VIEWS || {};
   const { esc, ago } = PK.fmt;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Environments --------------------------------------------------
@@ -26,24 +27,27 @@
     }
     const sorted = g => g.slice().sort((a, b) => order(a) - order(b) || b.deployedAt - a.deployedAt);
     const chip = (k, lbl) => `<button class="chip-btn ${envChip === k ? 'on' : ''}" onclick="_envC('${k}')">${lbl}</button>`;
-    // environment + live version size to their content (nowrap); the
-    // pipeline column soaks up the leftover width and truncates if needed
-    const row = e => `<tr onclick="location.hash='#/environments/${encodeURIComponent(e.name)}'">
-          <td class="nowrap">${e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>'}</td>
-          <td class="nowrap"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
-            ${e.drift ? ' <span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : ' <span class="chip">verifying…</span>'}</td>
-          <td class="mut small"><div class="ctt"><span class="shrink">${esc(e.pipeline)} · ${esc(e.job)}</span></div></td>
-          <td class="nowrap"><code>${esc(e.version)}</code></td>
-          <td class="mut small nowrap">${ago(e.deployedAt)} · ${esc(e.byBuild)} (${esc(e.by)})</td>
-        </tr>`;
+    const row = e => ({
+      nav: `#/environments/${encodeURIComponent(e.name)}`,
+      cells: [
+        e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>',
+        `<a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>${e.drift ? ' <span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : ' <span class="chip">verifying…</span>'}`,
+        `${esc(e.pipeline)} · ${esc(e.job)}`,
+        `<code>${esc(e.version)}</code>`,
+        `${ago(e.deployedAt)} · ${esc(e.byBuild)} (${esc(e.by)})`,
+      ],
+    });
     // same grouping as the Pipelines table: team subheads at all-teams scale
     const grouped = !PK.model.team() && envs.length > 9;
-    const rows = grouped
-      ? D().teams.map(t => {
+    const rows = [];
+    if (grouped) {
+      for (const t of D().teams) {
         const g = sorted(envs.filter(e => e.pipeline.split('/')[0] === t.name));
-        return g.length ? `<tr class="tsub"><td colspan="5">${esc(t.name)} <span class="mut">· ${g.length}</span></td></tr>${g.map(row).join('')}` : '';
-      }).join('')
-      : sorted(envs).map(row).join('');
+        if (!g.length) continue;
+        rows.push({ group: `${esc(t.name)} <span class="mut">· ${g.length}</span>` });
+        g.forEach(e => rows.push(row(e)));
+      }
+    } else sorted(envs).forEach(e => rows.push(row(e)));
     return `<div class="page"><h1>Environments <span class="mut small">${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span></h1>
       <div class="ctoolbar">
         <input data-filter aria-label="filter environments" placeholder="filter name, pipeline, version…  ( / )" value="${esc(envFilter)}" oninput="_envF(this.value)">
@@ -52,10 +56,17 @@
         <span class="mut small">${envs.length} of ${total}</span>
       </div>
       ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(PK.model.team())}'s pipelines.</div>`)}
-      <div class="tbl-scroll"><table class="tbl ctbl">
-        <thead><tr><th></th><th>environment</th><th>pipeline</th><th>live version</th><th>deployed</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
+      ${dataTable({
+      cols: [
+        { width: 'icon' },
+        { label: 'environment', width: 'content' },
+        // the pipeline column soaks up the leftover width and truncates
+        { label: 'pipeline', width: 'title', cls: 'mut small' },
+        { label: 'live version', width: 'content' },
+        { label: 'deployed', width: 'content', cls: 'mut small' },
+      ],
+      rows,
+    })}
     </div>`;
   };
 
@@ -79,15 +90,22 @@
           <div class="mut small">rollback is guided: trigger-with-version + pin, confirmed, audited</div>
         </div></section>
       <section class="panel"><div class="panel-head"><b>History</b><span class="mut small">newest first</span></div>
-        <div class="tbl-scroll"><table class="tbl ctbl">
-        ${e.history.map((h, i) => `<tr>
-          <td width="24">${h.ok ? '<span class="c-succeeded">✓</span>' : '<span class="c-failed">✕</span>'}</td>
-          <td class="nowrap"><code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}</td>
-          <td class="mut small" style="width:100%">${esc(h.build)}</td>
-          <td class="mut small nowrap r">${ago(h.at)}</td>
-          <td class="r nowrap">${i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : ''}</td>
-        </tr>`).join('')}
-        </table></div></section>
+        ${dataTable({
+      cols: [
+        { width: 'icon' },
+        { width: 'content' },
+        { width: 'fill', cls: 'mut small' },
+        { width: 'content', align: 'right', cls: 'mut small' },
+        { width: 'action' },
+      ],
+      rows: e.history.map((h, i) => ({ cells: [
+        h.ok ? '<span class="c-succeeded">✓</span>' : '<span class="c-failed">✕</span>',
+        `<code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}`,
+        esc(h.build),
+        ago(h.at),
+        i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : '',
+      ] })),
+    })}</section>
     </div>`;
   };
 })(window.PK);

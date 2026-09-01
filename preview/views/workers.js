@@ -3,7 +3,8 @@
 (function (PK) {
   'use strict';
   window.VIEWS = window.VIEWS || {};
-  const { esc, ago } = PK.fmt;
+  const { esc, ago, fmtDur } = PK.fmt;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Workers: "are the machines well" ------------------------------
@@ -26,35 +27,55 @@
     };
     const disk = w => gauge(w.status === 'stale' ? null : w.disk, 0.85);
     const cpu = w => gauge(w.status === 'stale' ? null : w.cpu, 0.9);
-    const row = w => `<tr onclick="location.hash='#/workers/${encodeURIComponent(w.name)}'">
-        <td class="nowrap"><a class="row-link" href="#/workers/${encodeURIComponent(w.name)}"><b>${esc(w.name)}</b></a>${(w.concurrency || 1) > 1 ? ` <span class="mut small" title="--concurrency ${w.concurrency} registers ${esc(w.name)}-1…${esc(w.name)}-${w.concurrency} — each registered worker runs one build">×${w.concurrency}</span>` : ''}</td>
-        <td class="nowrap">${w.status === 'provisioning'
-        ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
-        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${PK.fmt.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
-        <td class="nowrap">${w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>'}</td>
-        <td style="width:100%">${w.tags.map(t => `<code>${t}</code>`).join(' ')}</td>
-        <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : cpu(w)}</td>
-        <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : disk(w)}</td>
-        <td class="mut small nowrap">${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}</td>
-        <td class="r nowrap">${w.running ? `${w.running}/${w.concurrency} busy` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
-        <td class="r nowrap">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="drain" data-arg="${esc(w.name)}" onclick="event.stopPropagation()" title="drain is worker-side today (SIGQUIT); click for details">drain</button>`}</td>
-      </tr>`;
+    const state = w => w.status === 'provisioning'
+      ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
+      : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${fmtDur(w.up / 1000)}</span>` : ''}`;
+    const dash = '<span class="mut small">—</span>';
+    const row = w => ({
+      nav: `#/workers/${encodeURIComponent(w.name)}`,
+      cells: [
+        `<a class="row-link" href="#/workers/${encodeURIComponent(w.name)}"><b>${esc(w.name)}</b></a>${(w.concurrency || 1) > 1 ? ` <span class="mut small" title="--concurrency ${w.concurrency} registers ${esc(w.name)}-1…${esc(w.name)}-${w.concurrency} — each registered worker runs one build">×${w.concurrency}</span>` : ''}`,
+        state(w),
+        w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>',
+        w.tags.map(t => `<code>${t}</code>`).join(' '),
+        w.status === 'provisioning' ? dash : cpu(w),
+        w.status === 'provisioning' ? dash : disk(w),
+        `${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}`,
+        w.running ? `${w.running}/${w.concurrency} busy` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>',
+        w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="drain" data-arg="${esc(w.name)}" title="drain is worker-side today (SIGQUIT); click for details">drain</button>`,
+      ],
+    });
     const statics = workers.filter(w => !w.pool);
-    const poolRows = pools.map(p => {
+    const rows = [];
+    if (statics.length) {
+      rows.push({ group: `static <span class="mut">· ${statics.length} registered</span>` });
+      statics.forEach(w => rows.push(row(w)));
+    }
+    for (const p of pools) {
       const inst = workers.filter(w => w.pool === p.name);
       const online = inst.filter(w => w.status === 'online').length;
       const booting = inst.filter(w => w.status === 'provisioning').length;
-      return `<tr class="tsub"><td colspan="9">⛅ ${esc(p.name)}
+      rows.push({ group: `⛅ ${esc(p.name)}
         <span class="mut">· ${esc(p.provider)} · autoscale ${p.min}–${p.max} · <b>${online} healthy</b>${booting ? ` + ${booting} provisioning` : ''}${online + booting === 0 ? ' — <b>scaled to zero</b> (first job boots one, ~' + p.bootSecs + 's)' : ''}
-        · idle TTL ${esc(p.idleTtl)} · today: ${p.buildsToday} builds on ${p.terminatedToday + online} instances</span></td></tr>
-      ${inst.map(row).join('')}`;
-    }).join('');
+        · idle TTL ${esc(p.idleTtl)} · today: ${p.buildsToday} builds on ${p.terminatedToday + online} instances</span>` });
+      inst.forEach(w => rows.push(row(w)));
+    }
     return `<div class="page"><h1>Workers${PK.model.team() ? ` <span class="mut small">· team ${esc(PK.model.team())} + Global</span>` : ''}</h1>
-      <div class="tbl-scroll"><table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th style="width:100%">tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
-      <tbody>
-      ${statics.length ? `<tr class="tsub"><td colspan="9">static <span class="mut">· ${statics.length} registered</span></td></tr>${statics.map(row).join('')}` : ''}
-      ${poolRows}
-      </tbody></table></div>
+      ${dataTable({
+      className: 'wtbl',
+      cols: [
+        { label: 'worker', width: 'content' },
+        { label: 'state', width: 'content' },
+        { label: 'team', width: 'content' },
+        { label: 'tags', width: 'fill' },
+        { label: 'cpu', width: 'content' },
+        { label: 'disk', width: 'content' },
+        { label: 'version', width: 'content', cls: 'mut small' },
+        { label: 'running', width: 'content', align: 'right' },
+        { width: 'action' },
+      ],
+      rows,
+    })}
       <p class="mut small">Ephemeral instances are addressed by pool, not by name: a build's provenance keeps the instance name as a tombstone record (it must never dangle), but health, drain, and capacity questions are asked of the pool. Terminated instances roll up into the pool's daily count.</p>
       <p class="mut small">This dashboard is admin-only (Workers.md). Global workers skip a team's builds while that team has a healthy team worker — team workers win dispatch, global workers are the fallback.</p>
       <h2>Storage</h2>

@@ -5,6 +5,7 @@
   window.VIEWS = window.VIEWS || {};
   const { esc, fmtDur, ago } = PK.fmt;
   const { st } = PK.status;
+  const { dataTable } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Pipelines: dense data table (weather + duration trend) --------
@@ -59,27 +60,31 @@
       const lastB = D().builds.filter(b => b.pipeline === pl.name).sort((a, b) => b.start - a.start)[0];
       const lastLin = pr ? D().lineages.filter(l => (l.pl || 'pikoci-pr') === pl.name).sort((a, b) => b.updated - a.updated)[0] : null;
       const lastAt = lastB ? lastB.start : (lastLin ? lastLin.updated : (pl.resources[0].versions[0] || { meta: {} }).meta.at);
-      return `<tr onclick="location.hash='#/p/${pl.name}/graph'">
-        <td class="c-${s} ${s === 'started' ? 'pulse' : ''}">${pr ? '⇅' : st(s).sym}</td>
-        <td class="ct-title" title="${esc(pl.desc)}"><div class="ctt"><b>${esc(pl.team)}/${esc(pl.name)}</b>
-          ${pl.public ? '<span class="chip">public</span>' : ''}<span class="mut small shrink">— ${esc(pl.desc)}</span></div></td>
-        <td class="mut small nowrap">${pl.paused ? '❚❚ paused' : pr
-          ? `${counts.total} open PR${counts.total === 1 ? '' : 's'}${counts.failing ? ` · <b class="c-failed">${counts.failing} ✕</b>` : ''}${counts.held ? ` · ${counts.held} ⛔` : ''}`
-          : esc(pl.primaryContext.label)}</td>
-        <td class="nowrap">${VIEWS.weather(hist)}</td>
-        <td class="nowrap spark-cell">${VIEWS.sparkDur(hist)}</td>
-        <td class="mut small r nowrap">${lastAt ? ago(lastAt) : '—'}</td>
-        <td class="r"><a class="btn sm" href="#/p/${pl.name}/config" onclick="event.stopPropagation()">Config</a></td>
-      </tr>`;
+      return {
+        nav: `#/p/${pl.name}/graph`,
+        cells: [
+          { h: pr ? '⇅' : st(s).sym, cls: `c-${s} ${s === 'started' ? 'pulse' : ''}` },
+          { h: `<b>${esc(pl.team)}/${esc(pl.name)}</b> ${pl.public ? '<span class="chip">public</span>' : ''}<span class="mut small shrink">— ${esc(pl.desc)}</span>`, title: pl.desc },
+          pl.paused ? '❚❚ paused' : pr
+            ? `${counts.total} open PR${counts.total === 1 ? '' : 's'}${counts.failing ? ` · <b class="c-failed">${counts.failing} ✕</b>` : ''}${counts.held ? ` · ${counts.held} ⛔` : ''}`
+            : esc(pl.primaryContext.label),
+          VIEWS.weather(hist),
+          { h: VIEWS.sparkDur(hist), cls: 'spark-cell' },
+          lastAt ? ago(lastAt) : '—',
+          `<a class="btn sm" href="#/p/${pl.name}/config">Config</a>`,
+        ],
+      };
     };
-    const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th>weather · last ${10}</th><th>duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
     const grouped = !PK.model.team() && pls.length > 9;
-    const rows = grouped
-      ? D().teams.map(t => {
+    const rows = [];
+    if (grouped) {
+      for (const t of D().teams) {
         const g = sorted(pls.filter(p => p.team === t.name));
-        return g.length ? `<tr class="tsub"><td colspan="7">${esc(t.name)} <span class="mut">· ${g.length}</span></td></tr>${g.map(row).join('')}` : '';
-      }).join('')
-      : sorted(pls).map(row).join('');
+        if (!g.length) continue;
+        rows.push({ group: `${esc(t.name)} <span class="mut">· ${g.length}</span>` });
+        g.forEach(pl => rows.push(row(pl)));
+      }
+    } else sorted(pls).forEach(pl => rows.push(row(pl)));
     const chip = (k, lbl) => `<button class="chip-btn ${pipChip === k ? 'on' : ''}" onclick="_pipC('${k}')">${lbl}</button>`;
     return `<div class="page"><h1>Pipelines</h1>
       <div class="ctoolbar">
@@ -88,9 +93,20 @@
         <span class="sp"></span>
         <span class="mut small">${pls.length} of ${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl ptbl fixed">
-      <colgroup><col style="width:30px"><col><col style="width:124px"><col style="width:128px"><col style="width:148px"><col style="width:70px"><col style="width:74px"></colgroup>
-      ${head}<tbody>${rows}</tbody></table></div>
+      ${dataTable({
+      className: 'ptbl',
+      layout: 'fixed',
+      cols: [
+        { width: 'icon', px: '30px' },
+        { label: 'pipeline', width: 'title' },
+        { label: 'context', width: 'content', px: '124px', cls: 'mut small' },
+        { label: 'weather · last 10', width: 'content', px: '128px' },
+        { label: 'duration trend', width: 'content', px: '148px' },
+        { label: 'activity', width: 'content', px: '70px', align: 'right', cls: 'mut small' },
+        { width: 'action', px: '74px' },
+      ],
+      rows,
+    })}
       <p class="mut small">Weather = last 10 completed runs (glyph is the pass rate); duration bars are the same runs oldest→newest — ↑/↓ marks the last run drifting beyond ±25%/−20% of the median. Real installs derive both from the builds table; deep history lands with Insights (Phase 4).</p>
     </div>`;
   };

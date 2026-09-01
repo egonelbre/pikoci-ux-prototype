@@ -82,8 +82,11 @@
 <script src="../model/capability.js"></script>
 <!-- behaviour: needs both tiers above -->
 <script src="../lib/actions.js"></script>
+<script src="../lib/navigate.js"></script>
 <script src="../lib/keys.js"></script>
 <script src="../lib/live.js"></script>
+<!-- ui primitives -->
+<script src="../ui/table.js"></script>
 <!-- graph engine, then one file per page -->
 <script src="../graph/layout.js"></script>
 <script src="../graph/render.js"></script>
@@ -152,8 +155,8 @@
   });
 
   // One fill column per data table: the rest hug their content, so surplus
-  // width has exactly one place to go. Today several tables predate the rule;
-  // this becomes a 'fail' once ui/table.js owns every table (STRUCTURE.md §5).
+  // width has exactly one place to go. ui/table.js asserts this when it builds
+  // a table; this catches any table built by hand that skipped it.
   check('one-fill-column', () => {
     const bad = [];
     stage.querySelectorAll('table.ctbl').forEach((t, i) => {
@@ -169,7 +172,7 @@
       if (fills !== 1) bad.push(`table ${i + 1} has ${fills} fill columns (want exactly 1)`);
     });
     return bad;
-  }, 'warn');
+  });
 
   check('no-inline-handlers', () => {
     const bad = [];

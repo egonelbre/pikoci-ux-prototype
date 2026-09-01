@@ -5,6 +5,7 @@
   const { esc, ago } = PK.fmt;
   const { st } = PK.status;
   const { graphSVG } = PK.graph;
+  const { dataTable } = PK.ui;
 
   // ---------- Pipeline page -------------------------------------------------
   VIEWS.pipeline = function (name, view, ctx) {
@@ -31,34 +32,61 @@
         if (bb && bb.artifacts) for (const a of bb.artifacts) outs.push({ a, b: bb });
       }
       if (outs.length) body += `<h3>Outputs <span class="mut small">— produced by ${ctx ? `<code>${esc(ctx)}</code>` : 'the builds shown'}</span></h3>
-        <div class="tbl-scroll"><table class="tbl ctbl wtbl">
-        ${outs.map(({ a, b: ab }) => `<tr>
-          <td class="nowrap">📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a></td>
-          <td class="mut small nowrap">${esc(a.size)}</td>
-          <td class="mut small nowrap">${a.sha ? `sha256 <code>${esc(a.sha)}…</code>` : ''}</td>
-          <td class="mut small">${a.dest ? `→ ${esc(a.dest)}` : '<span class="mut">worker-local · retention pending</span>'}</td>
-          <td class="mut small r nowrap">from <a href="#/b/${ab.id}">${esc(ab.job)} #${ab.n}</a></td>
-        </tr>`).join('')}
-        </table></div>`;
+        ${dataTable({
+        className: 'wtbl',
+        cols: [
+          { width: 'content' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'fill', cls: 'mut small' },
+          { width: 'content', align: 'right', cls: 'mut small' },
+        ],
+        rows: outs.map(({ a, b: ab }) => ({ cells: [
+          `📦 <a href="javascript:void(0)" data-act="noop" title="download — served from the worker that built it">${esc(a.name)}</a>`,
+          esc(a.size),
+          a.sha ? `sha256 <code>${esc(a.sha)}…</code>` : '',
+          a.dest ? `→ ${esc(a.dest)}` : '<span class="mut">worker-local · retention pending</span>',
+          `from <a href="#/b/${ab.id}">${esc(ab.job)} #${ab.n}</a>`,
+        ] })),
+      })}`;
     }
     else if (view === 'versions') {
-      body = `<div class="tbl-scroll"><table class="tbl">${(res.versions || []).map(v => {
-        return `<tr><td width="20">${res.pinned && res.pinned.ref === v.id.ref ? '📌' : ''}</td>
-          <td><code>${esc(v.id.ref)}</code></td>
-          <td>${esc(v.meta.msg || '')} ${v.meta.author ? `<span class="mut small">· ${esc(v.meta.author)}</span>` : ''}</td>
-          <td class="mut small nowrap">${ago(v.meta.at)}</td>
-          <td><span class="dots">${pl.jobs.filter(PK.model.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
-        </tr>`;
-      }).join('')}</table></div>
+      body = `${dataTable({
+        dense: false,
+        cols: [
+          { width: 'icon' },
+          { width: 'content' },
+          { width: 'fill' },
+          { width: 'content', cls: 'mut small' },
+          { width: 'content' },
+        ],
+        rows: (res.versions || []).map(v => ({ cells: [
+          res.pinned && res.pinned.ref === v.id.ref ? '📌' : '',
+          `<code>${esc(v.id.ref)}</code>`,
+          `${esc(v.meta.msg || '')} ${v.meta.author ? `<span class="mut small">· ${esc(v.meta.author)}</span>` : ''}`,
+          ago(v.meta.at),
+          `<span class="dots">${pl.jobs.filter(PK.model.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span>`,
+        ] })),
+      })}
       ${res.pinned ? `<div class="warnbox gap">📌 pinned to <code>${esc(res.pinned.ref)}</code> by <b>${esc(res.pinned.actor)}</b> — "${esc(res.pinned.reason)}" (${ago(res.pinned.at)}). Newer versions are ignored; escape hatches carry actor + reason.</div>` : ''}`;
     } else if (view === 'config') {
       body = `<div class="pad">
         <div class="mut small gap-s">Revision-guarded set (CAS): a stale editor gets a conflict + three-way diff, never a silent overwrite. Restore creates a new revision.</div>
-        <div class="tbl-scroll"><table class="tbl"><thead><tr><th>rev</th><th>by</th><th>when</th><th>note</th><th></th></tr></thead>
-        ${pl.configHistory.map((h, i) => `<tr><td><b>${h.rev}</b>${i === 0 ? ' <span class="chip">current</span>' : ''}</td>
-          <td>${esc(h.by)}</td><td class="mut small">${ago(h.at)}</td><td>${esc(h.note)}</td>
-          <td class="r">${i > 0 ? `<button class="btn sm" data-act="noop">diff</button> <button class="btn sm" data-act="noop">restore as rev ${pl.configHistory[0].rev + 1}</button>` : ''}</td></tr>`).join('')}
-        </table></div></div>`;
+        ${dataTable({
+        dense: false,
+        cols: [
+          { label: 'rev', width: 'content' },
+          { label: 'by', width: 'content' },
+          { label: 'when', width: 'content', cls: 'mut small' },
+          { label: 'note', width: 'fill' },
+          { width: 'action' },
+        ],
+        rows: pl.configHistory.map((h, i) => ({ cells: [
+          `<b>${h.rev}</b>${i === 0 ? ' <span class="chip">current</span>' : ''}`,
+          esc(h.by), ago(h.at), esc(h.note),
+          i > 0 ? `<button class="btn sm" data-act="noop">diff</button> <button class="btn sm" data-act="noop">restore as rev ${pl.configHistory[0].rev + 1}</button>` : '',
+        ] })),
+      })}</div>`;
     }
     return `<div class="page">
       <div class="crumbs"><a href="#/pipelines">pipelines</a> / <b>${esc(pl.team)}/${esc(name)}</b>
