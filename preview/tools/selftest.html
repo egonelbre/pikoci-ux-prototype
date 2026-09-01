@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PikoCI preview — self-test</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../../logo/px/favicon-32.png">
+<link rel="stylesheet" href="../app.css">
+<style>
+  /* The harness chrome. Deliberately not using app.css classes, so a broken
+     stylesheet still leaves a readable report. */
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #fff; color: #111; }
+  #bar { position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 1px solid #ddd;
+         padding: 10px 16px; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  #bar h1 { font-size: 15px; margin: 0; }
+  #tally { font-weight: 700; }
+  #tally.ok { color: #0a7d28; } #tally.bad { color: #b30016; }
+  button { font: inherit; padding: 3px 10px; border: 1px solid #bbb; border-radius: 5px; background: #fafafa; cursor: pointer; }
+  #out { padding: 8px 16px 40px; }
+  .grp { margin: 14px 0 0; }
+  .grp > summary { cursor: pointer; padding: 3px 0; font-weight: 600; }
+  .grp[data-bad] > summary { color: #b30016; }
+  .grp[data-bad="0"] > summary { color: #0a7d28; font-weight: 400; }
+  .f { margin: 2px 0 2px 22px; font-size: 13px; }
+  .f.fail::before { content: "✕ "; color: #b30016; font-weight: 700; }
+  .f.warn::before { content: "! "; color: #a86500; font-weight: 700; }
+  .f.pass::before { content: "✓ "; color: #0a7d28; }
+  .f.warn { color: #7a4b00; }
+  code { background: #f2f2f2; padding: 0 3px; border-radius: 3px; font-size: 12px; }
+  /* The stage: views render here at a realistic width so widths and wraps are
+     measurable. Off-screen rather than display:none — a hidden element has no
+     layout, and half these checks are layout questions. */
+  #stagewrap { position: absolute; left: -20000px; top: 0; width: 1280px; }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <h1>preview self-test</h1>
+  <span id="tally">running…</span>
+  <button id="rerun">re-run</button>
+  <button id="snap">copy DOM snapshot</button>
+  <span id="note" style="color:#666;font-size:12px"></span>
+</div>
+<div id="out"></div>
+<div id="stagewrap"><div id="stage"></div></div>
+
+<script src="../data.js"></script>
+<script src="../core.js"></script>
+<script src="../views-a.js"></script>
+<script src="../views-b.js"></script>
+<script src="../routes.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const stage = document.getElementById('stage');
+  const out = document.getElementById('out');
+
+  // ---------- checks -------------------------------------------------------
+  // Each check reads the rendered stage for one route and reports findings.
+  // severity 'fail' breaks the build; 'warn' is a rule not fully adopted yet.
+
+  const CHECKS = [];
+  const check = (id, fn, severity) => CHECKS.push({ id, fn, severity: severity || 'fail' });
+
+  check('table-overflow', () => {
+    const bad = [];
+    stage.querySelectorAll('.tbl-scroll').forEach((el, i) => {
+      const over = el.scrollWidth - el.clientWidth;
+      if (over > 1) bad.push(`table ${i + 1} overflows its container by ${over}px — a data table should fit, not scroll`);
+    });
+    return bad;
+  });
+
+  check('header-single-line', () => {
+    const bad = [];
+    stage.querySelectorAll('.tbl th').forEach(th => {
+      // a wrapped header is ~2x line-height; 40px clears normal padding
+      if (th.offsetHeight > 40 && th.textContent.trim()) bad.push(`header "${th.textContent.trim()}" wraps to two lines`);
+    });
+    return bad;
+  });
+
+  // Only inline action buttons. Step-jump rows (.step-head) are block buttons
+  // that are supposed to be several lines tall.
+  check('button-single-line', () => {
+    const bad = [];
+    stage.querySelectorAll('.btn').forEach(b => {
+      const t = b.textContent.trim();
+      if (!t) return;
+      if (b.offsetHeight > 34) bad.push(`button "${t}" wraps (${b.offsetHeight}px tall) — its cell needs nowrap`);
+    });
+    return bad;
+  });
+
+  // One fill column per data table: the rest hug their content, so surplus
+  // width has exactly one place to go. Today several tables predate the rule;
+  // this becomes a 'fail' once ui/table.js owns every table (STRUCTURE.md §5).
+  check('one-fill-column', () => {
+    const bad = [];
+    stage.querySelectorAll('table.ctbl').forEach((t, i) => {
+      const cg = t.querySelector('colgroup');
+      let fills;
+      if (cg) fills = [...cg.children].filter(c => !c.style.width).length;
+      else {
+        const row = t.querySelector('tr');
+        if (!row) return;
+        fills = [...row.children].filter(c =>
+          c.style.width === '100%' || c.classList.contains('ct-title')).length;
+      }
+      if (fills !== 1) bad.push(`table ${i + 1} has ${fills} fill columns (want exactly 1)`);
+    });
+    return bad;
+  }, 'warn');
+
+  check('no-inline-handlers', () => {
+    const bad = [];
+    const seen = new Set();
+    stage.querySelectorAll('*').forEach(el => {
+      for (const a of el.attributes) {
+        if (/^on/.test(a.name) && !seen.has(a.name + el.tagName)) {
+          seen.add(a.name + el.tagName);
+          bad.push(`<${el.tagName.toLowerCase()} ${a.name}=…> — should be data-act / data-state / data-nav`);
+        }
+      }
+    });
+    return bad;
+  }, 'warn');
+
+  check('links-resolve', () => {
+    const bad = [];
+    const known = new Set(ROUTES.ALL.map(r => r[0]));
+    stage.querySelectorAll('a[href^="#/"]').forEach(a => {
+      const r = ROUTES.parse(a.getAttribute('href'));
+      try {
+        if (!ROUTES.main(r)) bad.push(`${a.getAttribute('href')} renders nothing`);
+      } catch (e) { bad.push(`${a.getAttribute('href')} throws: ${e.message}`); }
+      void known;
+    });
+    return bad;
+  });
+
+  // ---------- docs-fidelity assertions (DOCS-FIDELITY.md) ------------------
+  // Semantics that are easy to regress because they read as arbitrary wording.
+  // where: 'text' reads rendered text, 'html' also sees title= and other
+  // attributes (drain's explanation lives in a tooltip, not in the label).
+  const FIDELITY = [
+    ['b/pikoci/deploy/142', /waiting for approval/i, 'gated build says "waiting for approval"'],
+    ['b/pikoci/deploy/142', /holds no worker|no worker|nothing has run/i, 'gated build states it holds no worker'],
+    ['queue', /--concurrency/, 'queue explains --concurrency registers N single-build workers'],
+    ['workers', /global workers skip/i, 'workers page states global-vs-team dispatch preference'],
+    ['workers', /SIGQUIT|worker-side/, 'drain is described as worker-side', 'html'],
+    ['changes/scheduled', /check_interval|cron/, 'scheduling is shown as a cron resource'],
+  ];
+
+  // Audit records what happened, so every action is past tense: build.approved,
+  // pipeline.paused — never the imperative the button carried.
+  check('audit-past-tense', () => {
+    const bad = [];
+    stage.querySelectorAll('td code').forEach(c => {
+      const t = c.textContent.trim();
+      if (/^(build|pipeline|resource|worker|token)\.(approve|reject|cancel|create|pause|pin|hold|release|update|delete|drain|supersede)$/.test(t))
+        bad.push(`audit action "${t}" is imperative — the log records what happened, so it is past tense`);
+    });
+    return bad;
+  });
+
+  // ---------- runner -------------------------------------------------------
+  function renderRoute(hash) {
+    const route = ROUTES.parse(hash);
+    stage.innerHTML = '';
+    const html = ROUTES.shell(route) + ROUTES.main(route);
+    stage.innerHTML = html;
+    return html;
+  }
+
+  function run() {
+    out.innerHTML = '';
+    let fails = 0, warns = 0, routes = 0;
+
+    // console errors during rendering are failures
+    const realErr = console.error;
+    const consoleErrors = [];
+    console.error = function () { consoleErrors.push([...arguments].join(' ')); realErr.apply(console, arguments); };
+
+    for (const [hash, label] of ROUTES.ALL) {
+      routes++;
+      const findings = [];
+      let html = '';
+      consoleErrors.length = 0;
+
+      try {
+        html = renderRoute(hash);
+      } catch (e) {
+        findings.push({ sev: 'fail', text: `render threw: ${e.message}` });
+      }
+
+      if (html) {
+        for (const c of CHECKS) {
+          let res = [];
+          try { res = c.fn() || []; }
+          catch (e) { res = [`check "${c.id}" threw: ${e.message}`]; }
+          for (const r of res) findings.push({ sev: c.severity, text: `[${c.id}] ${r}` });
+        }
+        for (const [r, re, what, where] of FIDELITY) {
+          if (r !== hash) continue;
+          const hay = where === 'html' ? stage.innerHTML : stage.textContent;
+          if (!re.test(hay)) findings.push({ sev: 'fail', text: `[fidelity] ${what}` });
+        }
+      }
+      for (const e of consoleErrors) findings.push({ sev: 'fail', text: `[console] ${e}` });
+
+      const nf = findings.filter(f => f.sev === 'fail').length;
+      const nw = findings.filter(f => f.sev === 'warn').length;
+      fails += nf; warns += nw;
+
+      const d = document.createElement('details');
+      d.className = 'grp';
+      d.setAttribute('data-bad', String(nf));
+      if (nf) d.open = true;
+      d.innerHTML = `<summary>${nf ? '✕' : nw ? '!' : '✓'} <code>#/${hash}</code> ${label}` +
+        `${nf ? ` — ${nf} failure${nf === 1 ? '' : 's'}` : ''}${nw ? ` · ${nw} warning${nw === 1 ? '' : 's'}` : ''}</summary>` +
+        (findings.length
+          ? findings.map(f => `<div class="f ${f.sev}">${f.text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</div>`).join('')
+          : '<div class="f pass">all checks pass</div>');
+      out.appendChild(d);
+    }
+
+    console.error = realErr;
+    stage.innerHTML = '';
+
+    const t = document.getElementById('tally');
+    t.textContent = `${routes} routes · ${fails} failure${fails === 1 ? '' : 's'} · ${warns} warning${warns === 1 ? '' : 's'}`;
+    t.className = fails ? 'bad' : 'ok';
+    document.getElementById('note').textContent = fails ? '' : 'warnings are rules not fully adopted yet — see STRUCTURE.md';
+    return { routes, fails, warns };
+  }
+
+  // ---------- DOM snapshot -------------------------------------------------
+  // Steps 1–3 of STRUCTURE.md are pure moves: take a snapshot before, compare
+  // after, expect zero differences. Timestamps ("3m ago") and the live build
+  // move on their own, so those are normalised out.
+  function snapshot() {
+    const snap = {};
+    for (const [hash] of ROUTES.ALL) {
+      let html;
+      try { html = renderRoute(hash); } catch (e) { html = 'THREW: ' + e.message; }
+      // Order matters: strip the random ids first, or the relative-time rule
+      // below eats the "3d" inside "r-oymm3d" and the two runs disagree.
+      snap[hash] = html
+        .replace(/\br-[a-z0-9]{5,8}\b/g, '<rid>')             // random popover ids
+        .replace(/\d+(\.\d+)?(s|m|h|d)( ago)?/g, '<t>')       // relative times
+        .replace(/\d{1,2}:\d{2}(:\d{2})?/g, '<clock>')
+        .replace(/width:\s*[\d.]+%/g, 'width:<pct>')          // live progress bars
+        .replace(/\b\d{2,}%/g, '<pct>');
+    }
+    stage.innerHTML = '';
+    return snap;
+  }
+
+  window.SELFTEST = { run, snapshot, renderRoute };
+
+  document.getElementById('rerun').onclick = run;
+  document.getElementById('snap').onclick = function () {
+    const s = JSON.stringify(snapshot());
+    navigator.clipboard.writeText(s).then(
+      () => { this.textContent = `copied ${Math.round(s.length / 1024)}KB`; },
+      () => { this.textContent = 'clipboard blocked'; });
+  };
+
+  run();
+})();
+</script>
+</body>
+</html>

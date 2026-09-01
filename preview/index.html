@@ -25,40 +25,14 @@
 <script src="core.js"></script>
 <script src="views-a.js"></script>
 <script src="views-b.js"></script>
+<script src="routes.js"></script>
 <script>
 (function () {
   'use strict';
-  function render(route) {
-    document.getElementById('hdr').innerHTML = VIEWS.shell(route);
-    const m = document.getElementById('main');
-    const [a, b, c, d] = route;
-    const nav = P.navItems().map(i => i.id);
-    const gate = id => nav.includes(id) ? null : VIEWS.gated(id);
-
-    if (!a) m.innerHTML = VIEWS.home();
-    else if (a === 'pipelines') m.innerHTML = VIEWS.pipelines();
-    else if (a === 'p') m.innerHTML = VIEWS.pipeline(b, c, d);
-    else if (a === 'b') {
-      // deep-link alias: #/b/<pipeline>/<job>/<n> resolves by coordinates —
-      // stable across data.js edits, unlike generated build ids (#/b/b1042)
-      let id = b;
-      if (d !== undefined) {
-        const x = window.DATA.builds.find(y => y.pipeline === b && y.job === c && String(y.n) === String(d));
-        id = x ? x.id : b;
-      }
-      m.innerHTML = VIEWS.build(id);
-    }
-    else if (a === 'changes') m.innerHTML = gate('changes') || VIEWS.changes(b, c);
-    else if (a === 'environments') m.innerHTML = gate('environments') || VIEWS.environments(b);
-    else if (a === 'insights') m.innerHTML = VIEWS.gated('insights');
-    else if (a === 'queue') m.innerHTML = gate('queue') || VIEWS.queue();
-    else if (a === 'workers') m.innerHTML = gate('workers') || VIEWS.workers(b);
-    else if (a === 'audit') m.innerHTML = gate('audit') || VIEWS.audit();
-    else if (a === 'teams') m.innerHTML = VIEWS.teams();
-    else if (a === 'settings') m.innerHTML = VIEWS.settings();
-    else m.innerHTML = '<div class="page">Not found — <a href="#/">home</a></div>';
-  }
-  P.App.start(render);
+  P.App.start(function render(route) {
+    document.getElementById('hdr').innerHTML = ROUTES.shell(route);
+    document.getElementById('main').innerHTML = ROUTES.main(route);
+  });
 })();
 </script>
 </body>
