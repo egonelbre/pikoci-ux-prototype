@@ -14,7 +14,13 @@ goal is to compare information architecture and flows, then pick a direction.
   superseded-while-waiting, lineage supersession, a held fork PR with
   maintainer release, Environments with guided rollback, idempotent actions
   with conflict answers, ⌘K palette, `f`/`/` keys, light/dark. This is what
-  the real Phase 1a/1b/2 build ports.
+  the real Phase 1a/1b/2 build ports. `preview/STRUCTURE.md` describes how the
+  code is laid out (data / lib / model / ui / graph / views / styles) and the
+  four conventions that hold it together — no build step, opens from `file://`.
+  Two pages come with it, both double-clickable: `preview/tools/selftest.html`
+  renders every route and checks it (table sizing, wrapped headers, inline
+  handlers, docs fidelity), and `preview/graph/debug.html` draws the DAG
+  layout's lanes and ports on top of the real graph.
 - `UX-PLAN.md` — **the synthesis (v4 — final document round)**: design
   thesis with a differentiator-first strategic frame; opaque run_id +
   lineage identity; unified status vocabulary (non-runs are decision
@@ -26,6 +32,11 @@ goal is to compare information architecture and flows, then pick a direction.
   (108 findings total across eight review rounds, all folded in; the
   retired round 1–4 review files measured convergence 22→16→13→12 and
   produced the stopping rule v4.1 adopts). Start here.
+- `PLAN-REVIEW-5.md` — the fifth (latest) adversarial round; its fix
+  batch (R5-1..R5-5) is deliberately deferred until the external
+  round-5 pass returns (`REVIEW-PROMPT-CODEX.md` is that prompt).
+  Rounds 1–4 were retired once every finding was dispositioned in
+  UX-PLAN v4.1.
 - `REQUIREMENTS.md` — system requirements, roles, user journeys, and the scoring
   criteria (§4) for judging prototypes.
 - `SCENARIOS.md` — comprehensive catalog of 81 CI/CD usage scenarios, each

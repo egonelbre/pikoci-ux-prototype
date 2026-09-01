@@ -1,227 +1,156 @@
-# preview/ — code structure plan
+# preview/ — code structure
 
-How `preview/` gets taken apart and put back together. Written because the four
-files have grown past the point where you can find things in them; nothing here
-changes what the app does or how it looks.
+How `preview/` is put together, and the conventions that keep it that way.
 
-## 1. Where it hurts today
+It was six files and 3,877 lines; it is now 91 files and 5,139 (the growth is
+comments and file headers, not logic — the largest file is 207 lines and the
+average is 56). Nothing about what the app does or how it looks changed:
+every step was verified against the previous one, and the receipts are in the
+commit messages.
 
-Measured, not felt:
+## 1. Constraints
 
-| | |
-|---|---|
-| `data.js` | 1007 lines — canonical fixtures and synthetic scale generators interleaved |
-| `views-b.js` | 878 lines — names nothing; holds the DAG engine, the build page, and all of ops |
-| `core.js` | 724 lines — formatting, domain queries, actions, router, keyboard, live sim |
-| `views-a.js` | 641 lines — shell, home, changes, PRs, environments |
-| `app.css` | 565 lines, 582 rules, 392 selectors, three append-only "batch" sections |
-
-Five specific problems:
-
-**The a/b split carries no meaning.** `views-a.js` and `views-b.js` are a
-byte-count boundary. Nothing tells you the DAG layout engine is in b, or that
-`runGraph` (mini graph, in a) and `graphSVG` (full graph, in b) are siblings.
-
-**The longest functions are the hardest ones.** `graphSVG` 172 lines,
-`VIEWS.build` 169, `VIEWS.changes` 152, the `ACT` table ~160, `attention()` 107.
-In each case a genuinely intricate piece of logic — wrap-row lane assignment,
-port distribution, attention-class ranking — is spelled out inline inside a
-string template, so you cannot look at the algorithm without reading the markup
-it is embedded in.
-
-**Two event models, and they have already collided.** 38 inline handlers
-(`onclick=`, `oninput=`, `onmouseenter=`) coexist with capture-phase
-`data-act` delegation across 13 verbs. Twelve of the inline ones are
-`onclick="location.hash=…"` row navigation, each needing a matching
-`event.stopPropagation()` on every button inside the row — which is exactly the
-bug that killed queue-Cancel and worker-drain until the delegate moved to the
-capture phase.
-
-**View state is twelve loose globals.** `window._chgF`, `_chgC`, `_chgB`,
-`_brF`, `_brC`, `_pipF`, `_pipC`, `_envF`, `_envC`, `_wkR`, `_wkHi`, `_tq`, each
-a hand-written setter over a module-scoped `let`, each ending in
-`P.App.refresh()`. There is no list of what state the app holds and no way to
-reset it.
-
-**Repeated markup hides its own rules.** 27 `.tbl-scroll` tables, 21 chip
-sites, 12 filter inputs, each written out longhand. The column-sizing
-convention — nowrap columns pin to content, exactly one column carries
-`width:100%`, `.fixed` tables use a colgroup instead — lives only in a CSS
-comment, so every table re-derives it and three of them got it wrong. The
-`.ctbl td.small { min-width: 22ch }` rule, written for the queue's "why it
-waits" prose, silently put a 159px floor under every small cell in the app.
-That is a whole bug class, not one bug.
-
-## 2. Constraints
-
-- **No tooling.** No node, no bundler, no package.json in the preview path.
+- **No tooling.** No node, no bundler, no package.json anywhere in this path.
 - **`file://` must keep working.** Verified on Chrome 141: `<script type="module">`
   importing a sibling file is blocked — *"Access to script at 'file:///…' from
   origin 'null' has been blocked by CORS policy"*. So: classic scripts, ordered
   `<script>` tags, no `import`.
-- **`app.css` and the logo are hand-edited.** Any change to them is a mechanical
-  move proven not to alter rendering, never a rewrite.
-- **`prototypes/` is frozen.** Out of scope entirely.
+- **`prototypes/` is frozen.** Out of scope, untouched.
 
-## 3. The conventions
+## 2. The four conventions
 
-Four rules replace what a module system would have enforced.
+These do the job a module system would.
 
-### 3.1 One namespace, one file, dependencies at the top
+### 2.1 One namespace, one file, dependencies at the top
 
 ```js
 // preview/views/queue.js
 (function (PK) {
   'use strict';
-  const { esc, ago }   = PK.fmt;
-  const { dataTable }  = PK.ui;
-  const { waiting }    = PK.model.queue;
+  window.VIEWS = window.VIEWS || {};
+  const { esc, fmtDur, ago, bDur } = PK.fmt;
+  const { dataTable }              = PK.ui;
 
-  PK.views.queue = function () { … };
+  VIEWS.queue = function () { … };
 })(window.PK);
 ```
 
-The destructure at the top is the import list *and* the dependency check: load
-`queue.js` before `ui/table.js` and you get an immediate
-`TypeError: Cannot destructure property 'dataTable' of undefined` naming the
-file, instead of a silent `undefined` surfacing three clicks later.
+The destructure at the top is the import list *and* the load-order check: get
+the order wrong and you get an immediate `TypeError: Cannot destructure
+property 'dataTable' of undefined` naming the file, rather than an `undefined`
+surfacing three clicks later. It earned its keep during the migration —
+`routes.js` once took the `PK` parameter but not the argument, and every route
+failed loudly and identically instead of subtly.
 
-The rule that makes this safe: **destructure only leaf modules** (`fmt`, `ui`,
-`model`, `status`). Anything that can be re-entered or is created late — the
-router, actions, state — is reached through the namespace at call time
-(`PK.app.refresh()`), never captured at load time.
+**The rule that keeps it honest:** destructure pure leaves (`PK.fmt`,
+`PK.status`, `PK.model`, `PK.ui`, `PK.graph`). Capture the *namespace* for
+anything stateful — `lib/actions.js` calls `app.refresh()` through the object,
+`app.start()` calls `PK.live.start()` at boot — so nothing captures a function
+that does not exist yet.
 
-`window.P` and `window.VIEWS` go away; 134 `P.*` call sites and 59 `VIEWS.*`
-sites move to `PK.*`. No compatibility shim — a half-migrated namespace is worse
-than either end state.
+### 2.2 Three attribute families, one listener each
 
-### 3.2 Three attribute families, one listener each
+No inline JavaScript anywhere. Every interactive element declares intent.
 
-Every interactive element declares intent in an attribute. No inline JavaScript
-anywhere in the templates.
-
-| Attribute | Meaning | Handled in |
+| Attribute | Meaning | Owner |
 |---|---|---|
 | `data-act="verb" data-arg="…"` | run an action | `lib/actions.js` |
 | `data-state="key" data-value="…"` | set view state | `lib/state.js` |
-| `data-nav="#/…"` | navigate | `lib/nav.js` |
+| `data-nav="#/…"` | navigate | `lib/navigate.js` |
+| `data-toggle` / `-next` / `data-reveal` / `data-scroll` / `data-open-step` / `data-hilite` | show, hide, jump, light up | `lib/disclosure.js` |
 
-`data-nav` is the one that pays immediately: the delegate walks up from the
-click target and ignores the navigation if the click originated inside an
-`<a>`, `<button>`, `<input>` or anything carrying `data-act`. Twelve
-`onclick="location.hash=…"` attributes and every defensive
-`event.stopPropagation()` disappear, and the class of bug where a row swallows
-its own button's click becomes unrepresentable.
+`data-nav` carries one rule so no call site has to: a click that *started*
+inside a link, button, input or `[data-act]` belongs to that thing, not to the
+row. That removes twelve `onclick="location.hash=…"` attributes, every
+defensive `stopPropagation()`, and the bug class where a row swallows its own
+button's click.
 
-### 3.3 State is registered, not global
+### 2.3 State is registered, not global
 
 ```js
-// lib/state.js
 const filter = PK.state.use('changes.filter', '');
-filter.get();          // read
-filter.set('flaky');   // write + refresh
+filter.get();  filter.set('flaky');    // set() re-renders
 ```
 
 Backed by one `Map`, so `PK.state.dump()` prints everything the UI is holding.
-Views bind to it declaratively — `<input data-state="changes.filter">`,
-`<button data-state="changes.chip" data-value="failing">` — and `state.js` owns
-the two delegated listeners. All twelve `window._*` globals go.
+Views bind declaratively (`<input data-state="changes.filter">`) and write no
+handlers. `PK.state.define(key, {get, set})` covers state owned elsewhere with
+its own setter — the team scope lives in `app.session` and announces itself.
 
-Fold and `<details>` state moves into the registry too, which shrinks
-`App.refresh()`: it keeps restoring scroll positions and focus identity (both
-genuinely DOM-only concerns) and stops reconstructing open/closed state from the
-DOM it is about to destroy.
+Fold and `<details>` state deliberately stayed out: `app.refresh()` already
+restores both from the DOM correctly, and moving them would add registry keys
+without removing any code.
 
-### 3.4 Script order is a dependency tier list
+### 2.4 Script order is a dependency tier list
 
-`index.html` loads in five tiers, commented as such: **lib → model → ui → views
-→ boot**. Within a tier, alphabetical. A file may only destructure from a tier
-above it. This is the one rule a reviewer has to hold in their head.
+`index.html` loads in tiers, commented as such: **data → lib → model →
+behaviour → ui → graph → views → boot**. A file may only destructure from a
+tier above it. `<link>` order is the same idea for CSS: **tokens → base →
+status → components → views → lab → responsive**, and that order *is* the
+cascade.
 
-## 4. Target layout
+## 3. The layout
 
 ```
 preview/
-  index.html              boot + the route table, nothing else
+  index.html              the script/link manifest, and a three-line boot
+  routes.js               the route table — shared with tools/selftest.html
   STRUCTURE.md            this file
 
-  lib/                    no domain knowledge, no markup
-    fmt.js                esc, ago, fmtDur, bDur, lastOutputAge
-    state.js              the registry + its two delegated listeners
-    nav.js                data-nav delegate, route parse, hashchange, title/focus
-    actions.js            ACT verbs, idempotency keys, conflict answers, toast
-    keys.js               keyboard layer + ⌘K palette
-    live.js               the live simulation ticker
-    app.js                session, refresh + scroll/focus restoration, start()
+  data/                   21 files
+    factory.js            the clock, log generators, b()/S(), the collections
+    scenarios/            handwritten stories: trunk, prs, pr-builds,
+                          other-builds, decisions, pipelines, environments,
+                          versions, org, workers, audit
+    generate/             scale: pipelines, release-branches, delivery,
+                          packaging, environments, worker-week, branches,
+                          queued-arm
+    index.js              assembles window.DATA — and documents the load order,
+                          because b() hands out ids from a counter
 
-  model/                  pure functions over window.DATA — no DOM, no strings
-    status.js             STATUS, RANK, REASON, st, bStatus, reasonLabel
-    pipelines.js          pipelines, getPipeline, vmeta, jobBuilds, jobCell,
-                          primaryRef, primaryStatus, secondaryCounts, plHistory
-    lineages.js           lineages, lineageHead, lineageStatus, mine, branchIndex
-    checks.js             testStats, testRuns, testHistory, isNewFailure,
-                          measurementDelta, compareWithLastGreen
-    attention.js          attention() and its ranking classes
-    capability.js         navItems, gatedEmpty
-    ops.js                queue/worker/pool derivations
+  lib/                    9 files, no domain knowledge
+    fmt.js  toast.js  state.js  app.js  actions.js  navigate.js
+    disclosure.js  keys.js  live.js
 
-  ui/                     presentational primitives — markup, no domain knowledge
-    table.js              dataTable() — §5
-    panel.js              panel, section, empty state, allclear
-    filter.js             filter bar: input + chip row, bound to a state key
-    bits.js               chip, dot, statusDot, kbd, code, ctt/ellipsis wrapper
-    charts.js             weather, sparkDur, gauge, dots, weekChart
+  model/                  8 files, read-only queries over window.DATA
+    status.js  pipelines.js  lineages.js  branches.js  checks.js
+    builds.js  attention.js  capability.js
+
+  ui/                     presentational primitives
+    table.js              dataTable() — §4
+    filter.js             filterBar(): query + chips + count
 
   graph/
-    layout.js             pure: pipeline → {rows, nodes, edges, lanes, ports}
+    layout.js             pure geometry: pipeline → {W,H,pos,flat,wraps}
     render.js             geometry → SVG
-    debug.html            renders layouts with lane/port numbers visible
+    debug.html            the layout inspector — §5
 
-  views/                  one page each, orchestration only
-    shell.js  home.js  changes.js  prDetail.js  branchFeed.js
-    pipelines.js  pipeline.js  runGraph.js  runTimeline.js
-    build.js  checks.js
-    environments.js  envDetail.js
-    queue.js  workers.js  workerDetail.js
-    audit.js  teams.js  settings.js  gated.js
+  views/                  19 files, one per page, ~90 lines each
+    shell  chips  home  changes  branch-feed  pr-detail  run-graph
+    pipeline  pipelines  build  checks  environments  queue  workers
+    worker-detail  audit  teams  settings  gated
 
-  data/
-    factory.js            b(), S(), trunkRun(), prBuild(), the log generators
-    scenarios/            handwritten canonical stories
-      trunk.js  prs.js  delivery.js  packaging.js  decisions.js
-      environments.js  org.js        (teams, users, workers, pools, audit)
-    generate/             synthetic scale
-      pipelines.js  environments.js  branches.js  releases.js
-    index.js              assembles window.DATA
-
-  styles/
-    tokens.css            :root palette, themes, the WCAG text-contrast overrides
-    base.css              reset, layout, typography
-    components/           table.css chip.css button.css panel.css card.css
-                          dots.css gauge.css waterfall.css graph.css
-                          palette.css toast.css logs.css
-    views/                build.css changes.css pipelines.css workers.css
-    lab.css               data-skin / data-font style lab
+  styles/                 27 files
+    tokens.css base.css status.css lab.css responsive.css
+    components/           18 files: table, filter, buttons, header, panel,
+                          card, strip, dots, context, reason, graph,
+                          waterfall, verdict, log, box, palette, toast, rowlink
+    views/                build, changes, pipelines, workers
 
   tools/
-    selftest.html         §7
+    selftest.html         §6
 ```
 
-Roughly 55 files where there are 6. That sounds like a lot until you notice the
-average is ~70 lines and every name answers "where does X live".
+## 4. `dataTable()`
 
-## 5. `dataTable()` — the primitive worth building first
-
-27 tables, one convention, currently transcribed by hand each time. The helper
-takes a column spec and emits the markup the convention requires:
+25 tables, one convention, and it used to live only in a CSS comment — so every
+table re-derived it and three got it wrong.
 
 ```js
 dataTable({
-  className: 'ctbl',
   cols: [
     { width: 'icon' },
     { label: 'build',        width: 'content' },
-    { label: 'needs',        width: 'content' },
     { label: 'why it waits', width: 'fill', measure: '22ch' },
     { label: 'waiting',      width: 'content', align: 'right' },
     { width: 'action' },
@@ -230,98 +159,83 @@ dataTable({
 })
 ```
 
-What the spec encodes, so no view has to remember it:
+**Every column hugs its content except exactly one, which absorbs the slack** —
+and the helper asserts it, logging a warning that names the offending table's
+own headers instead of leaving you to wonder why "waiting" is 159px wide to
+hold "25m ago".
 
-- `content` → `nowrap` + the `width:1px` floor
-- `fill` → `width:100%`, and the optional `measure` becomes a `min-width` **on
-  that column only** — the fix that the `.small { min-width:22ch }` rule got
-  wrong by attaching a readable-measure rule to a font-size class
-- `title` → the `.ctt` / `.shrink` ellipsis wrapper
-- `action` → `nowrap`, so buttons never wrap (the four-line "Roll back to this")
-- exactly one `fill` column, asserted — a table with none or two is a console
-  warning, not a layout mystery
-- `layout: 'fixed'` emits `table-layout:fixed` + a `<colgroup>` and suppresses
-  the `width:1px` floor, which currently has to be remembered as
-  `:not(.fixed)` in the stylesheet
-- `rows[].nav` emits `data-nav`, so row navigation and inner buttons stop
-  fighting
+- `fill` — the one column that takes the leftover width. `measure` is a
+  readable-prose minimum attached to *this column*, never to a font-size class,
+  which is exactly what `.ctbl td.small { min-width: 22ch }` got wrong.
+- `title` — fill, but truncating via the `.ctt` / `.shrink` wrapper.
+- `content` — nowrap plus the `width:1px` floor.
+- `action` — nowrap, right-aligned; buttons never wrap.
+- `icon` — the fixed status-glyph column.
+- `layout: 'fixed'` emits a `<colgroup>` and suppresses the `width:1px` floor.
 
-`filter.js` does the same job for the four filter bars (input + chips + result
-count), all bound to a state key rather than a `window._` setter.
+Cells are strings or `{h, cls, title, attrs, colspan}`. Rows are
+`{cells, nav?, cls?, attrs?}`, `{group}` for a full-width subheading (a team, a
+pool, a repo), or `{raw}` for a row that is not a grid of cells at all — the
+source excerpt under a failed check.
 
-## 6. The graph engine
+## 5. `graph/debug.html`
 
-`graphSVG` is the single densest thing in the app and the part most likely to
-be changed again — it currently does layer assignment, greedy row wrapping,
-nested lane allocation, invisible-node junction fan-out, port distribution *and*
-SVG path emission in one 172-line function that returns a string.
+`graphSVG` used to do layer assignment, row wrapping, lane allocation,
+invisible-node fan-out, port distribution *and* path emission in one 172-line
+function returning a string. It is now `layout.js` (pure numbers, with every
+eye-tuned constant a named option carrying its rationale) and `render.js`
+(geometry → SVG, in four small pieces).
 
-Split at the geometry boundary:
+The inspector is the payoff. Open it, pick any pipeline, and it draws the
+layout on top of the real graph: lane `k`/`kIn` with their `xR`/`cy` channels,
+every port attachment point, the invisible fan-out nodes, and row bands. The
+last several rounds of graph tuning each cost a screenshot round-trip to work
+out why two lines crossed; that question is now answered by looking.
 
-- `graph/layout.js` — `layout(pipeline, opts) → {rows, nodes[], edges[], lanes[]}`,
-  pure numbers, no strings. Every constant that was tuned by eye this week
-  (`MAXW`, `rowGap`, `wrapGutter`, `LX`, the lane stride, the port
-  distribution) becomes a named option with its rationale next to it.
-- `graph/render.js` — geometry → SVG, including the rounded-corner path builder.
-- `graph/debug.html` — renders any pipeline's layout with lane indices, port
-  order and junction points drawn on top. The next time a line overlaps, that
-  page shows why in one look instead of requiring a screenshot round-trip.
+## 6. `tools/selftest.html`
 
-`runGraph` (the per-commit mini graph, today in `views-a.js`) moves next to it.
+Opens by double-clicking. No node, no playwright — it works because every view
+is a pure function returning a string, so it can render all 28 routes into a
+measured off-screen container in its own document.
 
-## 7. Safety net: `tools/selftest.html`
+Checks, all of which have caught something real: render throws and console
+errors; tables overflowing their container; headers wrapping to two lines;
+inline action buttons wrapping (`.step-head` rows are exempt — those are block
+buttons meant to be tall); exactly one fill column per table; any inline `on*`
+handler; every `#/` link on the page resolving; and the docs-fidelity
+assertions — gate lifecycle, `--concurrency`, global-vs-team dispatch,
+worker-side drain, cron-as-resource, past-tense audit actions.
 
-The route checker, table checker and fidelity checker that have been catching
-regressions all session live in `/tmp` and die with the session. They should be
-in the repo — and they can be, with no tooling, because every view is a pure
-function returning a string.
+`SELFTEST.snapshot()` returns a normalised `innerHTML` dump per route. Steps
+1–3 of the migration were pure moves, so the proof was a zero-diff comparison
+against it.
 
-`tools/selftest.html` loads the same scripts as the app, renders each route into
-a measured container, and prints a green/red list. It opens by double-clicking.
-Checks, all of which have caught something real:
+## 7. What changed against the original plan
 
-- every route and all 18 landing deep links render without throwing
-- no console errors
-- no table overflows its container horizontally
-- no table header wraps to two lines
-- every table has exactly one fill column
-- no button wraps to more than one line
-- the docs-fidelity assertions (gate lifecycle, reject reason, cron-as-resource,
-  past-tense audit actions)
+- **`lib/navigate.js` landed with step 4, not step 6.** `dataTable` emits
+  `data-nav`, so writing it any other way would have meant writing it twice.
+- **`model/` is eight files, not seven** — `branches.js` and `builds.js` split
+  out of what the plan called `pipelines.js`.
+- **`styles/` is 27 files, not the ~12 sketched** — components got one file
+  each rather than being grouped.
+- **Fold/`<details>` state stayed in the DOM.** See §2.3.
+- **Dead CSS removed:** `.chg*` (the PR card layout the dense Changes table
+  replaced), `.changes-table .row-link b`, and `.ct-title` (now the
+  `.ctt`/`.shrink` wrapper). Verified: no element in any route carries them.
 
-During the migration it gets one more mode, then loses it again: **DOM snapshot
-diff**. Before a step, dump `innerHTML` for every route to a JS blob; after, diff.
-Steps 1–3 below must produce a zero diff — that is what makes moving 3,800 lines
-of code safe rather than hopeful.
+## 8. How each step was proven
 
-## 8. Sequence
+| Step | Proof |
+|---|---|
+| 1–3 file moves | DOM snapshot byte-identical across all 28 routes |
+| 2 `P` → `PK` | identical after applying the same rename to the baseline |
+| graph split | byte-identical SVG |
+| 4 tables | column widths measured before/after; 17 screenshots within 1% |
+| 5–6 state/events | interaction suite grown to 16 tests |
+| 7 CSS | computed-style fingerprint: 31 properties × 35,010 elements × 46 route/theme pairs, identical |
 
-Each step lands as its own commit, green on `selftest.html`, and leaves the app
-working. No step is longer than an afternoon.
-
-| # | Step | Diff shape | Proof |
-|---|---|---|---|
-| 0 | `tools/selftest.html` against the code as it stands today | additive | catches the current state |
-| 1 | Split `data.js` → `data/` | pure move | snapshot diff = 0 |
-| 2 | Split `core.js` → `lib/` + `model/`, `P` → `PK` | move + rename | snapshot diff = 0 |
-| 3 | Split `views-a/b.js` → `views/`, `graph/` extracted | pure move | snapshot diff = 0 |
-| 4 | `ui/` primitives; migrate the 27 tables and 4 filter bars | markup changes | selftest green, screenshots reviewed |
-| 5 | `lib/state.js`; kill the 12 `window._*` globals | behaviour-preserving | selftest green |
-| 6 | `data-nav` + `data-state`; delete all 38 inline handlers | behaviour-preserving | selftest green |
-| 7 | Split `app.css` → `styles/`, fold the three batch layers into components | pure move | computed-style diff = 0 |
-
-Steps 1–3 are mechanical and could be done in one sitting; 4–6 are where the
-code actually gets better; 7 is last because `app.css` is the file most likely
-to have been edited on your side, and it needs its own before/after check
-(sample every element in every route, diff `getComputedStyle`) rather than a
-markup snapshot.
-
-## 9. Out of scope
-
-- `prototypes/` — frozen explorations, left alone.
-- Any change to what the app shows or how it behaves. Fidelity work, scenario
-  coverage and the deferred review batches continue against the new layout, not
-  as part of the move.
-- A framework, a build step, a package.json. If the real frontend adopts one,
-  this preview stays as it is: the reference for *what* to build, readable by
-  anyone with a browser.
+The CSS fingerprint caught four cascade-order regressions that were invisible
+by reading — status colors falling back to `--fg`, `--spark` reverting in dark
+theme, `.inline-det` losing to `.b2-det`, and the all-caps tracking rule losing
+to per-component values. That is the argument for keeping it: a stylesheet
+split cannot be reviewed by eye.
