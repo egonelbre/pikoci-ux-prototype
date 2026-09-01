@@ -202,11 +202,14 @@ Three rules keep the lines readable, all of them in `layout.js`:
   things then have to agree, and the self-test checks all three: the topmost
   target takes the outermost lane, its merge node sits highest, and each
   source's outgoing ports leave in the order of the merge nodes they feed.
-- **Junctions are spines, not points.** A fan-in or fan-out node spreads its
-  lines along a short vertical segment with its own ports, exactly the way a
-  real node spreads them along its edge. Terminating five curves at one pixel
-  drew the last stretch of all five on top of itself; several junctions in one
-  column are stacked by their actual heights so they cannot overlap either.
+- **Lanes get two strides.** Channels in the row gap are spaced by
+  `laneStride` (6px — vertical space between rows is scarce), but the vertical
+  drops in the right gutter and the arrivals in the left one get `dropStride`
+  (12px). Space out there is cheap and those are the longest lines in the
+  picture; at 6px three drops read as one thick line rather than three routes.
+  The lane base is computed once per row, because clamping each group's `xR`
+  separately against its merge node overwrote the lane offset and collapsed
+  delivery's three drops onto a single column.
 - **Arrivals** — the last leg reserves room for the corner, a straight run and
   the arrow head, so those stay three distinct shapes. Too little and the
   curve, the run and the triangle smear into one blob; the left gutter on a

@@ -33,14 +33,19 @@
     MAXW: 1160,              // wrap width — a 13" laptop with the nav open
     rowGap: 52,              // vertical space between rows; the wrap lanes live here
     wrapGutter: 42,          // right margin held back so a lane never clips the edge
-    leftGutter: 52,          // left margin on wrapped graphs: the drop lanes into
-                             // the first column sit side by side here, and each
-                             // needs room for a corner, a run and an arrow head
-    laneStride: 6,           // offset between nested lanes; below ~5 they merge visually
+    leftGutter: 88,          // left margin on wrapped graphs: the arrival drops
+                             // into the first column sit side by side here, each
+                             // needing a corner, a run and an arrow head, and
+                             // they are spaced by dropStride like their lanes
+    laneStride: 6,           // offset between nested channels in the row gap,
+                             // where vertical space is scarce
+    dropStride: 12,          // horizontal offset between the vertical drops in
+                             // the right gutter. Space is cheap out there and
+                             // these are long lines, so they get more room than
+                             // the channels: at 6px three drops read as one
+                             // thick line rather than three routes
     maxLanes: 5,             // more than five nested lanes stop being followable
-    fanSpread: 22,           // vertical separation between invisible junction nodes
-    junctionStride: 7,       // spacing of a junction's own ports along its spine
-    junctionGap: 12,         // clear space between two junctions in one column
+    fanSpread: 22,           // vertical separation between invisible fan-out nodes
     cornerR: 10,             // rounded corner radius on routed wrap connectors
     detourClear: 12,         // gap kept between a routed long edge and a node box
     detourStride: 6,         // separation between long edges sharing one channel
@@ -188,39 +193,37 @@
     for (const g of wrapGroups.values()) (byRow[g.row] = byRow[g.row] || []).push(g);
     for (const r of Object.keys(byRow)) {
       const gs = byRow[r].sort((p, q) => rankY(p) - rankY(q));
+
+      // The merge node sits right of every source, and the lane has to clear
+      // it. That floor is shared by the whole row: computing it per group and
+      // clamping each xR against it separately is what collapsed delivery's
+      // three drops onto one x — the clamp overwrote the lane offset, so three
+      // trunks came down the canvas on top of each other.
+      let laneBase = LX + maxRowW - pad + 10;
+      for (const g of gs) {
+        if (g.kind !== 'in') continue;
+        g.sources.sort((p, q) => p.p.y - q.p.y);
+        g.mx = Math.max(...g.sources.map(t => t.p.x + t.p.w)) + o.mergeGap;
+        laneBase = Math.max(laneBase, g.mx + o.mergeGap);
+      }
+
       gs.forEach((g, i) => {
         g.k = (gs.length - 1 - i) % o.maxLanes;
         g.kIn = Math.min(gs.length, o.maxLanes) - 1 - g.k;
-        g.xR = LX + maxRowW - pad + 10 + g.k * o.laneStride;
+        g.xR = laneBase + g.k * o.dropStride;
         g.cy = rowY[g.row] - Math.round(rowGap * 0.62) + g.k * o.laneStride;
+        W = Math.max(W, g.xR + 16);
         // where the trunk turns from vertical back to horizontal. It has to
         // leave room for the whole arrival — corner, straight run, head, gap —
         // or the curve and the triangle overlap into a blob.
         const arrival = o.cornerR + o.arriveRun + o.headLen + o.headGap;
         const tgt = g.kind === 'in' ? g.b : g.targets[0].p;
-        g.entryX = Math.max(6, tgt.x - arrival - g.kIn * o.laneStride);
-        if (g.kind === 'in') {
-          // the merge node: right of every source, left of the lane it feeds
-          g.sources.sort((p, q) => p.p.y - q.p.y);
-          // The merge node needs room on both sides: enough for the sources
-          // to curve into it, and enough before the lane corner. Sources in
-          // the row's last column have neither by default, so the lane (and
-          // with it the canvas) moves out to make it.
-          const rightmost = Math.max(...g.sources.map(t => t.p.x + t.p.w));
-          g.mx = rightmost + o.mergeGap;
-          g.xR = Math.max(g.xR, g.mx + o.mergeGap);
-          W = Math.max(W, g.xR + 16);
-        } else if (g.targets.length > 1) {
+        g.entryX = Math.max(6, tgt.x - arrival - g.kIn * o.dropStride);
+        if (g.kind !== 'in' && g.targets.length > 1) {
           g.targets.sort((p, q) => p.p.y - q.p.y);
-          g.jx = Math.max(8, 8 + g.k * o.laneStride);            // the invisible node
+          g.jx = Math.max(8, 8 + g.k * o.dropStride);            // the invisible node
           g.jy = g.targets.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.targets.length
             + (g.k - (gs.length - 1) / 2) * o.fanSpread;
-          // departures spread along a spine, for the same reason
-          g.jh = (g.targets.length - 1) * o.junctionStride;
-          g.portY = {};
-          g.targets.forEach((t, i2) => {
-            g.portY[t.name] = g.jy + (i2 - (g.targets.length - 1) / 2) * o.junctionStride;
-          });
         }
       });
 
@@ -235,21 +238,8 @@
         (cols.get(c) || cols.set(c, []).get(c)).push(g);
       }
       for (const list of cols.values()) {
-        // A junction is a short vertical spine, not a point: its lines attach
-        // at spread ports the way a real node's do, or the last stretch of
-        // five curves is drawn on top of itself.
-        for (const g of list) g.jh = (g.sources.length - 1) * o.junctionStride;
-        const total = list.reduce((s2, g) => s2 + g.jh, 0) + o.junctionGap * (list.length - 1);
         const mid = list.reduce((s2, g) => s2 + srcY(g), 0) / list.length;
-        let cursor = mid - total / 2;
-        for (const g of list) {
-          g.my = cursor + g.jh / 2;
-          cursor += g.jh + o.junctionGap;
-          g.portY = {};
-          g.sources.forEach((t, i2) => {
-            g.portY[t.name] = g.my + (i2 - (g.sources.length - 1) / 2) * o.junctionStride;
-          });
-        }
+        list.forEach((g, i2) => { g.my = mid + (i2 - (list.length - 1) / 2) * o.fanSpread; });
       }
     }
 

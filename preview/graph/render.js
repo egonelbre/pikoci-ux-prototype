@@ -66,19 +66,15 @@
     const arrive = (b2, y2, ex) =>
       line(`M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - o.headGap - o.headLen + 1}`) + head(b2.x, y2);
 
-    // the junction's spine: what its spread ports attach to
-    const spine = (x, cy, h) => h > 0 ? line(`M${x},${cy - h / 2} V${cy + h / 2}`) : '';
-
     if (g.kind === 'in') {
       const b2 = g.b, y2 = g.entryY, ex = g.entryX;
-      // each source curves into its own port on the merge spine, then ONE
-      // trunk crosses the canvas
+      // each source curves into the merge node, then ONE trunk crosses
       let s2 = '';
       for (const t of g.sources) {
-        const x1 = t.p.x + t.p.w, y1 = g.srcY1[t.name], py = g.portY[t.name], mx = (x1 + g.mx) / 2;
-        s2 += line(`M${x1},${y1} C${mx},${y1} ${mx},${py} ${g.mx},${py}`);
+        const x1 = t.p.x + t.p.w, y1 = g.srcY1[t.name], mx = (x1 + g.mx) / 2;
+        s2 += line(`M${x1},${y1} C${mx},${y1} ${mx},${g.my} ${g.mx},${g.my}`);
       }
-      return s2 + spine(g.mx, g.my, g.jh) + trunk(g.mx, g.my, ex, y2 - R) + arrive(b2, y2, ex);
+      return s2 + trunk(g.mx, g.my, ex, y2 - R) + arrive(b2, y2, ex);
     }
 
     if (g.targets.length === 1) {
@@ -86,12 +82,12 @@
       return trunk(g.a.x + g.a.w, g.y1, ex, y2 - R) + arrive(b2, y2, ex);
     }
     // fan-out splits ONCE at the invisible node layout put in the new row
-    let s2 = trunk(g.a.x + g.a.w, g.y1, g.jx, g.jy) + spine(g.jx, g.jy, g.jh);
+    let s2 = trunk(g.a.x + g.a.w, g.y1, g.jx, g.jy);
     for (const t of g.targets) {
-      const y2 = g.fanY[t.name], py = g.portY[t.name], mx = (g.jx + t.p.x) / 2;
+      const y2 = g.fanY[t.name], mx = (g.jx + t.p.x) / 2;
       // a bezier already arrives horizontally, so it only needs to stop at the
       // head rather than reserve a straight run before it
-      s2 += line(`M${g.jx},${py} C${mx},${py} ${mx},${y2} ${t.p.x - o.headGap - o.headLen + 1},${y2}`) + head(t.p.x, y2);
+      s2 += line(`M${g.jx},${g.jy} C${mx},${g.jy} ${mx},${y2} ${t.p.x - o.headGap - o.headLen + 1},${y2}`) + head(t.p.x, y2);
     }
     return s2;
   }

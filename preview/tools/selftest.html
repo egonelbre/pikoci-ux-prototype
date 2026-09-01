@@ -330,25 +330,19 @@
           out2.push(`${pl.name}: ${name}'s outgoing ports are not ordered by destination (${byPort.join(',')}) — its curves cross`);
       }
 
-      // 5. a junction is a spine with spread ports, not a point — otherwise
-      //    the last stretch of every line meeting there is drawn on top of
-      //    itself — and two spines in one column must not overlap
-      const spines = {};
-      for (const g of lay.wraps) {
-        const names = g.kind === 'in' ? g.sources : (g.targets.length > 1 ? g.targets : null);
-        if (!names) continue;
-        const x = Math.round(g.kind === 'in' ? g.mx : g.jx);
-        const cy = g.kind === 'in' ? g.my : g.jy;
-        const ys = names.map(t => g.portY[t.name]);
-        if (new Set(ys.map(y => Math.round(y))).size !== ys.length)
-          out2.push(`${pl.name}: junction for ${g.kind === 'in' ? g.to : g.from} stacks ${ys.length} lines on ${new Set(ys.map(Math.round)).size} port(s)`);
-        (spines[x] = spines[x] || []).push({ lo: cy - g.jh / 2, hi: cy + g.jh / 2, n: g.kind === 'in' ? g.to : g.from });
-      }
-      for (const list of Object.values(spines)) {
-        const sorted = list.slice().sort((p, q) => p.lo - q.lo);
-        for (let i2 = 1; i2 < sorted.length; i2++)
-          if (sorted[i2].lo < sorted[i2 - 1].hi)
-            out2.push(`${pl.name}: junction spines for ${sorted[i2 - 1].n} and ${sorted[i2].n} overlap`);
+      // 5. two trunks in one row must not share a drop or an arrival column —
+      //    they would come down the canvas on top of each other, and nothing
+      //    would say which route goes where
+      for (const [r, gs] of Object.entries(byRow)) {
+        for (const [what, of] of [['drop', g => g.xR], ['arrival', g => g.entryX]]) {
+          const seen = {};
+          for (const g of gs) {
+            const x = Math.round(of(g));
+            const who = g.kind === 'in' ? g.to : g.from;
+            if (seen[x]) out2.push(`${pl.name} row ${r}: ${what} column ${x} is shared by ${seen[x]} and ${who}`);
+            seen[x] = who;
+          }
+        }
       }
 
       // 6. an arrow head needs the corner, the run and the triangle to fit
@@ -437,7 +431,7 @@
       d.innerHTML = `<summary>${findings.length ? '✕' : '✓'} <code>graph routing</code> geometry invariants over all ${window.DATA.pipelines.length} pipelines`
         + `${findings.length ? ` — ${findings.length} failure${findings.length === 1 ? '' : 's'}` : ''}</summary>`
         + (findings.length ? findings.map(f => `<div class="f fail">${f.text}</div>`).join('')
-          : '<div class="f pass">no edge behind a node · lanes nested · merge nodes follow their lanes · ports ordered by destination · junction spines spread and clear · arrow heads clear</div>');
+          : '<div class="f pass">no edge behind a node · lanes nested · merge nodes follow their lanes · ports ordered by destination · drop and arrival columns distinct · arrow heads clear</div>');
       out.appendChild(d);
     }
 
