@@ -343,7 +343,9 @@
         <span class="sp"></span>
         <span class="mut small">${pls.length} of ${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl ptbl">${head}<tbody>${rows}</tbody></table></div>
+      <div class="tbl-scroll"><table class="tbl ctbl ptbl fixed">
+      <colgroup><col style="width:30px"><col><col style="width:124px"><col style="width:128px"><col style="width:148px"><col style="width:70px"><col style="width:74px"></colgroup>
+      ${head}<tbody>${rows}</tbody></table></div>
       <p class="mut small">Weather = last 10 completed runs (glyph is the pass rate); duration bars are the same runs oldest→newest — ↑/↓ marks the last run drifting beyond ±25%/−20% of the median. Real installs derive both from the builds table; deep history lands with Insights (Phase 4).</p>
     </div>`;
   };

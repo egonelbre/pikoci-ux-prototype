@@ -13,9 +13,6 @@
     const attn = P.attention();
     const active = id => (sec === id || (id === 'home' && !route[0]) || (id === 'pipelines' && ['p', 'b'].includes(sec))) ? 'on' : '';
     const tsel = P.team();
-    const font = document.documentElement.dataset.font;
-    const skin = document.documentElement.dataset.skin;
-    const styleOpen = document.querySelector('.style-lab')?.open;
     return `<header>
       <a class="logo" href="#/"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.15em;vertical-align:-0.2em"> PikoCI <span class="preview-tag">preview</span></a>
       <select class="team-sel" aria-label="team scope" title="team scope — filters every page (maps to the backend's team scoping)"
@@ -28,17 +25,6 @@
       </nav>
       ${attn.items.length ? `<a href="#/" class="attn-badge" title="items needing you">${attn.items.length}</a>` : ''}
       <span class="sp"></span>
-      <details class="style-lab" ${styleOpen ? 'open' : ''}>
-        <summary class="ghost" title="try UI styles">✦ Style</summary>
-        <div class="style-pop">
-          <fieldset><legend>Typeface</legend><div class="style-options type-options">
-            ${[['system', 'System'], ['rounded', 'Rounded'], ['mono', 'Mono'], ['accessible', 'Accessible'], ['space', 'Space'], ['serif', 'Serif'], ['slab', 'Slab'], ['typewriter', 'Typewriter'], ['condensed', 'Condensed'], ['arcade', 'Arcade']].map(([v, label]) => `<label><input type="radio" name="font" value="${v}" ${font === v ? 'checked' : ''} onchange="document.documentElement.dataset.font=this.value"><span>${label}</span></label>`).join('')}
-          </div></fieldset>
-          <fieldset><legend>Boxes &amp; borders</legend><div class="style-options skin-options">
-            ${[['soft', 'Soft'], ['pixel', 'Pixel'], ['glow', 'Glow'], ['outline', 'Outline'], ['paper', 'Paper'], ['bubble', 'Bubble'], ['flat', 'Flat'], ['bevel', 'Bevel'], ['blueprint', 'Blueprint'], ['glass', 'Glass']].map(([v, label]) => `<label><input type="radio" name="skin" value="${v}" ${skin === v ? 'checked' : ''} onchange="document.documentElement.dataset.skin=this.value"><span>${label}</span></label>`).join('')}
-          </div></fieldset>
-        </div>
-      </details>
       <button class="ghost" data-act="theme" title="toggle theme">◐</button>
       <button class="ghost" data-palette-btn aria-label="open command palette" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true}))">⌘K</button>
       <a class="${sec === 'settings' ? 'on' : ''}" href="#/settings">egon ⚙</a>
@@ -168,7 +154,7 @@
         <span class="sp"></span>
         <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${P.team() ? ' in ' + esc(P.team()) : ''}</span>
       </div>
-      <div class="tbl-scroll"><table class="tbl ctbl fixed changes-table">
+      <div class="tbl-scroll"><table class="tbl ctbl fixed">
         <colgroup><col style="width:30px"><col><col style="width:92px"><col style="width:114px"><col style="width:188px"><col style="width:132px"><col style="width:84px"></colgroup>
         <thead><tr><th></th><th>PR</th><th>repo</th><th>author</th><th>branch @ head</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
         <tbody>
@@ -578,21 +564,22 @@
     }
     const sorted = g => g.slice().sort((a, b) => order(a) - order(b) || b.deployedAt - a.deployedAt);
     const chip = (k, lbl) => `<button class="chip-btn ${envChip === k ? 'on' : ''}" onclick="_envC('${k}')">${lbl}</button>`;
+    // environment + live version size to their content (nowrap); the
+    // pipeline column soaks up the leftover width and truncates if needed
     const row = e => `<tr onclick="location.hash='#/environments/${encodeURIComponent(e.name)}'">
-          <td>${e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>'}</td>
-          <td class="ct-title"><div class="ctt"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
-            ${e.drift ? '<span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : '<span class="chip">verifying…</span>'}</div></td>
-          <td class="mut small nowrap">${esc(e.pipeline)} · ${esc(e.job)}</td>
-          <td><code>${esc(e.version)}</code></td>
+          <td class="nowrap">${e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>'}</td>
+          <td class="nowrap"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
+            ${e.drift ? ' <span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : ' <span class="chip">verifying…</span>'}</td>
+          <td class="mut small"><div class="ctt"><span class="shrink">${esc(e.pipeline)} · ${esc(e.job)}</span></div></td>
+          <td class="nowrap"><code>${esc(e.version)}</code></td>
           <td class="mut small nowrap">${ago(e.deployedAt)} · ${esc(e.byBuild)} (${esc(e.by)})</td>
-          <td class="r nowrap"><button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}" onclick="event.stopPropagation()">↩ Rollback…</button></td>
         </tr>`;
     // same grouping as the Pipelines table: team subheads at all-teams scale
     const grouped = !P.team() && envs.length > 9;
     const rows = grouped
       ? D().teams.map(t => {
         const g = sorted(envs.filter(e => e.pipeline.split('/')[0] === t.name));
-        return g.length ? `<tr class="tsub"><td colspan="6">${esc(t.name)} <span class="mut">· ${g.length}</span></td></tr>${g.map(row).join('')}` : '';
+        return g.length ? `<tr class="tsub"><td colspan="5">${esc(t.name)} <span class="mut">· ${g.length}</span></td></tr>${g.map(row).join('')}` : '';
       }).join('')
       : sorted(envs).map(row).join('');
     return `<div class="page"><h1>Environments <span class="mut small">${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span></h1>
@@ -604,7 +591,7 @@
       </div>
       ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(P.team())}'s pipelines.</div>`)}
       <div class="tbl-scroll"><table class="tbl ctbl">
-        <thead><tr><th></th><th>environment</th><th>pipeline</th><th>live version</th><th>deployed</th><th class="r"></th></tr></thead>
+        <thead><tr><th></th><th>environment</th><th>pipeline</th><th>live version</th><th>deployed</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
     </div>`;
