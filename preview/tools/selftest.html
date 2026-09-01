@@ -205,6 +205,29 @@
     return bad;
   });
 
+  // Console output is monospaced text: one line per line. A "\n" between two
+  // block spans inside white-space:pre is preserved and gets a line box of its
+  // own, so a log renders double-spaced while an excerpt beside it, built from
+  // inline spans, renders single — same class, two spacings.
+  check('log-line-spacing', () => {
+    const bad = [];
+    stage.querySelectorAll('pre.log').forEach((pre, i) => {
+      const lines = [...pre.querySelectorAll(':scope > .ln')];
+      if (lines.length < 2) return;
+      const lh = parseFloat(getComputedStyle(pre).lineHeight);
+      const r = lines.map(l => l.getBoundingClientRect());
+      if (!r[0].height) return;                       // a folded step
+      for (let k = 1; k < r.length; k++) {
+        const step = r[k].top - r[k - 1].top;
+        if (step > lh * 1.5) {
+          bad.push(`log ${i + 1}: lines are ${Math.round(step / lh * 100) / 100}x apart (line-height ${lh}px) — the lines are probably joined with "\n"`);
+          break;
+        }
+      }
+    });
+    return bad;
+  });
+
   check('no-inline-handlers', () => {
     const bad = [];
     const seen = new Set();

@@ -132,7 +132,7 @@
           ${failIdx >= 0 ? `<div class="err-first">
             <div class="err-head">✕ first failure: ${esc(b.steps[failIdx].name)}
               <a href="javascript:void(0)" data-scroll="step-${failIdx}">jump ↓</a></div>
-            <pre class="log excerpt">${b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error /.test(l)).slice(0, 4).map(l => `<span class="l-err">${esc(l)}</span>`).join('\n')}</pre>
+            <pre class="log excerpt">${b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error /.test(l)).slice(0, 4).map(l => `<span class="ln"><span class="l-err">${esc(l)}</span></span>`).join('')}</pre>
           </div>` : ''}
 
           ${VIEWS.testSection(pl, b)}
@@ -159,7 +159,7 @@
             </button>
             <div ${sp.status === 'failed' || sp.status === 'started' ? '' : 'hidden'} data-fold="st:${b.id}:${i}">
               ${sp.log.length > 200 ? `<div class="mut small pad-s">showing last 200 of ${sp.log.length} lines · <a href="javascript:void(0)" data-act="noop">download full log</a> <span class="mut">(tail-first)</span></div>` : ''}
-              ${sp.log.length ? `<pre class="log">${sp.log.slice(-200).map((l, k) => `<span class="ln"><span class="lno">${Math.max(0, sp.log.length - 200) + k + 1}</span>${/FAIL|ERROR|Error /.test(l) ? `<span class="l-err">${esc(l)}</span>` : /✓|^ok |OK$|PASS/.test(l) ? `<span class="l-ok">${esc(l)}</span>` : /^\$ /.test(l) ? `<span class="l-cmd">${esc(l)}</span>` : esc(l)}</span>`).join('\n')}</pre>` : '<div class="pad-s mut small">no output yet</div>'}
+              ${sp.log.length ? `<pre class="log">${sp.log.slice(-200).map((l, k) => `<span class="ln"><span class="lno">${Math.max(0, sp.log.length - 200) + k + 1}</span>${/FAIL|ERROR|Error /.test(l) ? `<span class="l-err">${esc(l)}</span>` : /✓|^ok |OK$|PASS/.test(l) ? `<span class="l-ok">${esc(l)}</span>` : /^\$ /.test(l) ? `<span class="l-cmd">${esc(l)}</span>` : esc(l)}</span>`).join('')}</pre>` : '<div class="pad-s mut small">no output yet</div>'}
             </div>
           </div>`).join('')}
           </div>
