@@ -184,7 +184,23 @@ source excerpt under a failed check.
 invisible-node fan-out, port distribution *and* path emission in one 172-line
 function returning a string. It is now `layout.js` (pure numbers, with every
 eye-tuned constant a named option carrying its rationale) and `render.js`
-(geometry → SVG, in four small pieces).
+(geometry → SVG, in small pieces).
+
+Three rules keep the lines readable, all of them in `layout.js`:
+
+- **Fan-out** — one source feeding several jobs in the next row splits once at
+  an invisible node *in that row*, not at the wrap point.
+- **Fan-in** — several sources feeding the same job merge once at an invisible
+  node *in their own row*, so one trunk crosses the canvas instead of three.
+  Fan-in wins any edge both groupings would claim, because it saves more.
+  `delivery`'s 17 cross-row edges come out as 4 trunks.
+- **Detours** — an edge spanning several layers would otherwise pass behind
+  every node in between (a cron resource triggering a late job did exactly
+  that: the line vanished under two boxes and reappeared). It is routed
+  orthogonally along a horizontal channel that is clear in every column it
+  crosses, picked nearest to where the line wanted to be. Alleys between node
+  rows hold one or two lines, so assignment is capacity-aware; anything that
+  does not fit gets a bus lane under the row, and the canvas grows to hold it.
 
 The inspector is the payoff. Open it, pick any pipeline, and it draws the
 layout on top of the real graph: lane `k`/`kIn` with their `xR`/`cy` channels,

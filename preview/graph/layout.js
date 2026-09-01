@@ -5,10 +5,19 @@
 // the graph has to flow like text: pack layers left-to-right, start a new row
 // when the next one would not fit, and route the edge that crosses rows down a
 // lane in the right gutter and back into the new row's first column. Several
-// such edges at once need nested lanes that do not cross each other, and a
-// source that fans out to three targets in the new row should split ONCE —
-// at an invisible node in that row — rather than dragging three long parallel
-// lines across the whole canvas.
+// such edges at once need nested lanes that do not cross each other.
+//
+// A wrap connector is expensive — it crosses the whole canvas — so the layout
+// works to have as few as possible. Invisible junction nodes do that in both
+// directions: a source feeding three jobs in the new row splits ONCE at a node
+// in that row (fan-out), and three sources feeding the same job merge ONCE at
+// a node in their own row (fan-in). delivery's 17 cross-row edges become 4
+// trunks rather than 17 parallel lines.
+//
+// The other way a line goes wrong is passing UNDER a node: an edge spanning
+// several layers (a cron resource triggering a late job) would run straight
+// through everything in between. Those get an orthogonal detour along a
+// horizontal channel that is clear in every column they cross.
 //
 // Every constant below was tuned by eye against the packaging and delivery
 // pipelines; the comment on each says what it is trading off, so the next
@@ -30,6 +39,12 @@
     maxLanes: 5,             // more than five nested lanes stop being followable
     fanSpread: 22,           // vertical separation between invisible fan-out nodes
     cornerR: 10,             // rounded corner radius on routed wrap connectors
+    detourClear: 12,         // gap kept between a routed long edge and a node box
+    detourStride: 6,         // separation between long edges sharing one channel
+    detourInset: 2,          // keep a line just off an alley's own edges
+    headGap: 6,              // clear space between an arrow head and its node
+    mergeGap: 30,            // room each side of a fan-in's invisible merge node
+    detourStub: 16,          // straight run out of a port before the first turn
   };
 
   // Layer assignment: resources first, then jobs by dependency depth.
@@ -99,13 +114,20 @@
       let y = rowY[rowOf[li]] + (rowH[rowOf[li]] - used) / 2; // centre within row
       layer.forEach(n => { pos[n.name] = { x: LX + layerX[li] + xOff[rowOf[li]], y, w, h, kind: n.kind, row: rowOf[li] }; y += h + gapY; });
     });
-    const W = LX + maxRowW + (nRows > 1 ? 26 : 0), H = acc - rowGap + pad;
+    let W = LX + maxRowW + (nRows > 1 ? 26 : 0);
+    let H = acc - rowGap + pad;   // a bus lane for long edges can extend this
 
-    // ---- edges: same-row ones are simple beziers; cross-row ones group by
-    // source, because one source feeding three jobs in the next row is ONE
-    // trunk with a fan-out, not three separate long lines --------------------
+    // ---- edges: same-row ones are simple beziers; cross-row ones are
+    // grouped, because a wrap connector is expensive — it crosses the whole
+    // canvas — so as few of them as possible should exist.
+    //
+    //   fan-out  one source feeding several jobs in the next row is ONE trunk
+    //            that splits at an invisible node IN THE NEW ROW
+    //   fan-in   several sources feeding the SAME job in the next row merge at
+    //            an invisible node IN THEIR OWN ROW, so again only one trunk
+    //            crosses instead of three parallel ones
     const flat = [];
-    const wrapGroups = new Map();
+    const cross = [];
     for (const j of pl.jobs) for (const inp of j.inputs || []) {
       const targets = (inp.passed && inp.passed.length) ? inp.passed : [inp.res];
       for (const from of targets) {
@@ -114,27 +136,67 @@
         const sw = inp.passed && inp.passed.length ? 2 : 1.4;
         const dash = inp.trigger === false ? 'stroke-dasharray="4 4"' : '';
         if (a.row === b.row) flat.push({ from, to: j.name, a, b, sw, dash });
-        else {
-          const key = from + '|' + b.row;
-          if (!wrapGroups.has(key)) wrapGroups.set(key, { from, a, row: b.row, sw, dash, targets: [] });
-          wrapGroups.get(key).targets.push({ name: j.name, p: b });
-        }
+        else cross.push({ from, a, to: j.name, b, sw, dash });
       }
+    }
+
+    // fan-in first: it saves the most lines, so it wins any edge both
+    // groupings would claim
+    const wrapGroups = new Map();
+    const inBy = new Map();
+    for (const e of cross) {
+      const k = e.to + '|' + e.a.row;
+      (inBy.get(k) || inBy.set(k, []).get(k)).push(e);
+    }
+    const claimed = new Set();
+    for (const [k, es] of inBy) {
+      if (es.length < 2) continue;
+      es.forEach(e => claimed.add(e));
+      wrapGroups.set('in:' + k, {
+        kind: 'in', to: es[0].to, b: es[0].b, row: es[0].b.row, srcRow: es[0].a.row,
+        sw: Math.max(...es.map(e => e.sw)), dash: es.every(e => e.dash) ? es[0].dash : '',
+        sources: es.map(e => ({ name: e.from, p: e.a })),
+      });
+    }
+    for (const e of cross) {
+      if (claimed.has(e)) continue;
+      const key = 'out:' + e.from + '|' + e.b.row;
+      if (!wrapGroups.has(key)) wrapGroups.set(key, {
+        kind: 'out', from: e.from, a: e.a, row: e.b.row, sw: e.sw, dash: e.dash, targets: [],
+      });
+      wrapGroups.get(key).targets.push({ name: e.to, p: e.b });
     }
 
     // ---- lanes: the topmost source takes the OUTERMOST right lane and the
     // LOWEST channel, so lanes nest instead of crossing. Entry lanes reverse
     // (kIn), so a channel coming in from outside ends up inside afterwards ----
+    // A fan-in group is ranked by where its sources sit, since that is where
+    // its trunk leaves from.
+    const srcY = g => g.kind === 'in'
+      ? g.sources.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.sources.length
+      : g.a.y;
     const byRow = {};
     for (const g of wrapGroups.values()) (byRow[g.row] = byRow[g.row] || []).push(g);
     for (const r of Object.keys(byRow)) {
-      const gs = byRow[r].sort((p, q) => p.a.y - q.a.y);
+      const gs = byRow[r].sort((p, q) => srcY(p) - srcY(q));
       gs.forEach((g, i) => {
         g.k = (gs.length - 1 - i) % o.maxLanes;
         g.kIn = Math.min(gs.length, o.maxLanes) - 1 - g.k;
         g.xR = LX + maxRowW - pad + 10 + g.k * o.laneStride;
         g.cy = rowY[g.row] - Math.round(rowGap * 0.62) + g.k * o.laneStride;
-        if (g.targets.length > 1) {
+        if (g.kind === 'in') {
+          // the merge node: right of every source, left of the lane it feeds
+          g.sources.sort((p, q) => p.p.y - q.p.y);
+          // The merge node needs room on both sides: enough for the sources
+          // to curve into it, and enough before the lane corner. Sources in
+          // the row's last column have neither by default, so the lane (and
+          // with it the canvas) moves out to make it.
+          const rightmost = Math.max(...g.sources.map(t => t.p.x + t.p.w));
+          g.mx = rightmost + o.mergeGap;
+          g.xR = Math.max(g.xR, g.mx + o.mergeGap);
+          W = Math.max(W, g.xR + 16);
+          g.my = srcY(g) + (g.k - (gs.length - 1) / 2) * o.fanSpread;
+        } else if (g.targets.length > 1) {
           g.targets.sort((p, q) => p.p.y - q.p.y);
           g.jx = Math.max(8, 8 + g.k * o.laneStride);            // the invisible node
           g.jy = g.targets.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.targets.length
@@ -154,6 +216,14 @@
       slot(ins, e.to).push({ key: cYp(e.a), set: y => { e.y2 = y; } });
     }
     for (const g of wrapGroups.values()) {
+      if (g.kind === 'in') {
+        // one port per source, and ONE arrival on the target — the whole point
+        g.srcY1 = {};
+        for (const t of g.sources)
+          slot(outs, t.name).push({ key: 1e6 + g.row, set: y => { g.srcY1[t.name] = y; } });
+        slot(ins, g.to).push({ key: -1e6 - g.cy, set: y => { g.entryY = y; } });
+        continue;
+      }
       slot(outs, g.from).push({ key: 1e6 + g.row, set: y => { g.y1 = y; } }); // trunk leaves at the bottom port
       if (g.targets.length === 1) {
         // drops arrive from above; among drops, the upper channel's takes the
@@ -169,6 +239,115 @@
       const p = pos[name], list = m[name].sort((x2, y2) => x2.key - y2.key);
       list.forEach((it, i) => it.set(p.y + p.h * (i + 1) / (list.length + 1)));
     }
+
+    // ---- long edges: route AROUND what they would otherwise cross ---------
+    // A resource that feeds a late job (a cron triggering `build`, say) spans
+    // several layers, and a straight bezier from one to the other passes
+    // behind every node in between — it reads as a line disappearing under a
+    // box and reappearing on the far side. Such an edge gets an orthogonal
+    // detour through a horizontal channel that is clear in every column it
+    // crosses. Runs last, because it needs the port positions above.
+    const nodeList = Object.entries(pos).map(([name, q]) => Object.assign({ name }, q));
+    const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+    const wants = [];
+    for (const e of flat) {
+      const x1 = e.a.x + e.a.w, x2 = e.b.x;
+      const lo = Math.min(e.y1, e.y2), hi = Math.max(e.y1, e.y2);
+      // what sits in the corridor between the two endpoints
+      const inSpan = nodeList.filter(q => q.name !== e.from && q.name !== e.to
+        && q.row === e.a.row && q.x < x2 && q.x + q.w > x1);
+      // a long edge whose straight line happens to miss everything stays straight
+      if (!inSpan.some(q => q.y < hi + o.detourClear && q.y + q.h > lo - o.detourClear)) continue;
+
+      // free horizontal bands: everything in the corridor is an obstacle,
+      // whatever its own y — the channel has to clear the whole column
+      const blocked = inSpan
+        .map(q => [q.y - o.detourClear, q.y + q.h + o.detourClear])
+        .sort((p, q) => p[0] - q[0]);
+      const merged = [];
+      for (const b2 of blocked) {
+        const last = merged[merged.length - 1];
+        if (last && b2[0] <= last[1]) last[1] = Math.max(last[1], b2[1]);
+        else merged.push(b2.slice());
+      }
+      const bands = [];
+      let cursor = pad / 2;
+      for (const [g0, g1] of merged) { if (g0 - cursor > 10) bands.push([cursor, g0]); cursor = Math.max(cursor, g1); }
+      if (H - pad / 2 - cursor > 10) bands.push([cursor, H - pad / 2]);
+      if (!bands.length) continue;
+
+      // rank the alleys by how near each gets the line to where it wanted to be
+      const ideal = (e.y1 + e.y2) / 2;
+      const ranked = bands.map(([g0, g1]) => ({ g0, g1, y: clamp(ideal, g0 + o.detourInset, g1 - o.detourInset) }))
+        .sort((p, q) => Math.abs(p.y - ideal) - Math.abs(q.y - ideal));
+      wants.push({ e, ideal, ranked });
+    }
+
+    // Assign alleys with a capacity. The gap between two node rows is only
+    // gapY - 2*detourClear wide, so it holds one or two lines, not five —
+    // without a cap they pack in half a pixel apart and read as one wobbly
+    // line. Assigned top-to-bottom, so lines in the same alley do not cross.
+    const capOf = b => Math.max(1, Math.floor((b.g1 - b.g0) / o.detourStride));
+    const load = new Map();
+    const overflow = [];
+    for (const want of wants.sort((p, q) => p.ideal - q.ideal)) {
+      const picked = want.ranked.find(b => (load.get(b.g0 + ':' + b.g1) || []).length < capOf(b));
+      if (!picked) { overflow.push(want); continue; }
+      const key = picked.g0 + ':' + picked.g1;
+      const list = load.get(key) || [];
+      list.push(want);
+      load.set(key, list);
+      want.e.detour = { y: picked.y, lo: picked.g0, hi: picked.g1 };
+    }
+
+    // Nowhere left inside: run under the whole row on a bus lane, and grow the
+    // canvas to hold it. Always available, always clear, and it reads as a
+    // deliberate bus rather than as lines squeezed between boxes.
+    if (overflow.length) {
+      const rowsUsed = new Set(overflow.map(w => w.e.a.row));
+      const busY = {};
+      for (const r of rowsUsed) {
+        const bottom = Math.max(...nodeList.filter(q => q.row === r).map(q => q.y + q.h));
+        busY[r] = bottom + o.detourClear + o.detourStride;
+      }
+      overflow.sort((p, q) => p.ideal - q.ideal).forEach((w, i2) => {
+        const y = busY[w.e.a.row] + i2 * o.detourStride;
+        w.e.detour = { y, lo: y - o.detourStride / 2, hi: y + o.detourStride / 2, bus: true };
+        H = Math.max(H, y + o.detourClear + pad / 2);
+      });
+    }
+
+    // several lines in one alley: spread them evenly, in start order
+    for (const list of load.values()) {
+      if (list.length < 2) continue;
+      const { lo, hi } = list[0].e.detour;
+      const room = Math.max(0, hi - lo - 2 * o.detourInset);
+      const stride = Math.min(o.detourStride, room / (list.length - 1));
+      const base = (lo + hi) / 2;
+      list.sort((p, q) => p.e.y1 - q.e.y1).forEach((w, i2) => {
+        w.e.detour.y = clamp(base + (i2 - (list.length - 1) / 2) * stride, lo + o.detourInset, hi - o.detourInset);
+      });
+    }
+
+    // Several long edges leaving the same column converge on the same two
+    // vertical stubs, which would draw them on top of each other. Stagger the
+    // turn points, ordered by channel, so the verticals nest like the wrap
+    // lanes do instead of overlapping.
+    const stagger = (keyOf, field) => {
+      const by = new Map();
+      for (const e of flat) {
+        if (!e.detour) continue;
+        const k = Math.round(keyOf(e));
+        (by.get(k) || by.set(k, []).get(k)).push(e);
+      }
+      for (const list of by.values()) {
+        if (list.length < 2) continue;
+        list.sort((p, q) => p.detour.y - q.detour.y);
+        list.forEach((e, i2) => { e.detour[field] = i2; });
+      }
+    };
+    stagger(e => e.a.x + e.a.w, 'kOut');
+    stagger(e => e.b.x, 'kIn');
 
     return { W, H, pos, flat, wraps: [...wrapGroups.values()], nRows, opts: o };
   }

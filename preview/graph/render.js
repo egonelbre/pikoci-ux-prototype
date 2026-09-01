@@ -11,33 +11,81 @@
   const { layout } = PK.graph;
 
   // ---------- edges ---------------------------------------------------------
-  function edgeSVG(e) {
-    const x1 = e.a.x + e.a.w, x2 = e.b.x, mx = (x1 + x2) / 2;
+  function edgeSVG(e, o) {
+    const x1 = e.a.x + e.a.w, x2 = e.b.x;
+    if (e.detour) {
+      const p = detourPath(e, x1, x2, o);
+      if (p) return `<path d="${p}" fill="none" stroke="var(--edge)" stroke-width="${e.sw}"
+        stroke-linecap="round" stroke-linejoin="round" ${e.dash}/>`;
+    }
+    const mx = (x1 + x2) / 2;
     return `<path d="M${x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${x2},${e.y2}" fill="none"
         stroke="var(--edge)" stroke-width="${e.sw}" ${e.dash}/>`;
+  }
+
+  // An edge that spans several layers cannot go straight — it would pass
+  // behind every node in between. layout.js picked a clear horizontal channel
+  // for it; this draws the two right-angle turns onto it and the two back off,
+  // with the same rounded corners the wrap connectors use.
+  function detourPath(e, x1, x2, o) {
+    const cy = e.detour.y;
+    // nested turn points, so several long edges out of one column do not draw
+    // their verticals on top of each other
+    const xa = x1 + o.detourStub + (e.detour.kOut || 0) * o.laneStride;
+    const xb = x2 - o.detourStub - (e.detour.kIn || 0) * o.laneStride;
+    const s1 = cy >= e.y1 ? 1 : -1, s2 = e.y2 >= cy ? 1 : -1;
+    // the radius has to fit in the shortest leg, or the corners overshoot
+    const R = Math.min(o.cornerR, Math.abs(cy - e.y1) / 2, Math.abs(e.y2 - cy) / 2, (xb - xa) / 2);
+    if (!(R >= 2)) return null;   // too tight to route; the bezier is fine here
+    return `M${x1},${e.y1} H${xa - R}`
+      + ` q${R},0 ${R},${s1 * R} V${cy - s1 * R} q0,${s1 * R} ${R},${s1 * R}`
+      + ` H${xb - R}`
+      + ` q${R},0 ${R},${s2 * R} V${e.y2 - s2 * R} q0,${s2 * R} ${R},${s2 * R}`
+      + ` H${x2}`;
   }
 
   // A wrap connector leaves its source, runs right into its lane, drops into
   // the channel above the target row, and comes back left — all with rounded
   // corners, so it reads as one routed line rather than three segments.
-  function wrapSVG(g, R) {
+  //
+  // Two shapes share that trunk. A fan-OUT splits once at an invisible node in
+  // the new row; a fan-IN merges once at an invisible node in its own row, so
+  // three sources feeding one job send one line across the canvas, not three.
+  function wrapSVG(g, o) {
+    const R = o.cornerR;
     const cap = 'stroke-linecap="round" stroke-linejoin="round"';
-    const head = (x2, y2) => `<path d="M${x2 - 1},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
-    const trunkTo = (ex, ey) => `<path d="M${g.a.x + g.a.w},${g.y1} H${g.xR - R} q${R},0 ${R},${R} V${g.cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}"
-          fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
+    // the head sits clear of the node, not touching it
+    const head = (x2, y2) => `<path d="M${x2 - o.headGap},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
+    const line = d => `<path d="${d}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
+    // from a start point: right into the lane, down the channel, back left
+    const trunk = (sx, sy, ex, ey) =>
+      line(`M${sx},${sy} H${g.xR - R} q${R},0 ${R},${R} V${g.cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}`);
+    // the last leg into the target, stopping short of the arrow head
+    const arrive = (b2, y2, ex) =>
+      line(`M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - o.headGap - 7}`) + head(b2.x, y2);
+
+    if (g.kind === 'in') {
+      const b2 = g.b, y2 = g.entryY, ex = Math.max(6, b2.x - 12 - g.kIn * 5);
+      // each source curves into the merge node, then ONE trunk crosses
+      let s2 = '';
+      for (const t of g.sources) {
+        const x1 = t.p.x + t.p.w, y1 = g.srcY1[t.name], mx = (x1 + g.mx) / 2;
+        s2 += line(`M${x1},${y1} C${mx},${y1} ${mx},${g.my} ${g.mx},${g.my}`);
+      }
+      return s2 + trunk(g.mx, g.my, ex, y2 - R) + arrive(b2, y2, ex);
+    }
+
     if (g.targets.length === 1) {
       const b2 = g.targets[0].p, y2 = g.entryY, ex = Math.max(6, b2.x - 12 - g.kIn * 5);
-      return trunkTo(ex, y2 - R) +
-        `<path d="M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - 2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` +
-        head(b2.x, y2);
+      return trunk(g.a.x + g.a.w, g.y1, ex, y2 - R) + arrive(b2, y2, ex);
     }
     // fan-out splits ONCE at the invisible node layout put in the new row
-    let s = trunkTo(g.jx, g.jy);
+    let s2 = trunk(g.a.x + g.a.w, g.y1, g.jx, g.jy);
     for (const t of g.targets) {
       const y2 = g.fanY[t.name], mx = (g.jx + t.p.x) / 2;
-      s += `<path d="M${g.jx},${g.jy} C${mx},${g.jy} ${mx},${y2} ${t.p.x - 2},${y2}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>` + head(t.p.x, y2);
+      s2 += line(`M${g.jx},${g.jy} C${mx},${g.jy} ${mx},${y2} ${t.p.x - o.headGap - 1},${y2}`) + head(t.p.x, y2);
     }
-    return s;
+    return s2;
   }
 
   // ---------- nodes ---------------------------------------------------------
@@ -77,8 +125,8 @@
   function graphSVG(pl, ctxRef) {
     const lay = layout(pl);
     let edges = '';
-    for (const e of lay.flat) edges += edgeSVG(e);
-    for (const g of lay.wraps) edges += wrapSVG(g, lay.opts.cornerR);
+    for (const e of lay.flat) edges += edgeSVG(e, lay.opts);
+    for (const g of lay.wraps) edges += wrapSVG(g, lay.opts);
 
     let nodes = '';
     const refs = new Set();

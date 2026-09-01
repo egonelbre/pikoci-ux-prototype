@@ -49,8 +49,10 @@
   .ov .junction { fill: none; stroke: #7a3cc4; stroke-width: 1.5; }
   .ov .jlabel { fill: #7a3cc4; }
   .ov .rowline { stroke: #999; stroke-width: 1; stroke-dasharray: 2 6; }
+  .ov .detour { stroke: #0b63c5; stroke-width: 1; stroke-dasharray: 6 3; fill: none; opacity: .7; }
+  .ov .dlabel { fill: #0b63c5; }
   .legend span { margin-right: 14px; font-size: 12px; }
-  .k1 { color: #b30016 } .k2 { color: #0a7d28 } .k3 { color: #7a3cc4 }
+  .k1 { color: #b30016 } .k2 { color: #0a7d28 } .k3 { color: #7a3cc4 } .k4 { color: #0b63c5 }
 </style>
 </head>
 <body>
@@ -60,6 +62,7 @@
   <label>pipeline <select id="pl"></select></label>
   <label><input type="checkbox" id="ovLanes" checked> lanes</label>
   <label><input type="checkbox" id="ovPorts" checked> ports</label>
+  <label><input type="checkbox" id="ovDetours" checked> detours</label>
   <label><input type="checkbox" id="ovRows" checked> row bands</label>
   <span id="stats"></span>
 </div>
@@ -67,7 +70,8 @@
   <p class="legend">
     <span class="k1">— lane k / xR / cy (cross-row routing channels)</span>
     <span class="k2">• port attachment points, numbered in fan order</span>
-    <span class="k3">◇ invisible fan-out node (jx, jy)</span>
+    <span class="k3">◇ invisible fan-out / fan-in node</span>
+    <span class="k4">— channel a long edge is routed along</span>
   </p>
   <div id="out"></div>
 </div>
@@ -155,11 +159,25 @@
         add('path', { class: 'lane', d: `M0,${w.cy} H${lay.W}` });
         // label to the LEFT of the lane: the lanes sit in the right gutter, so
         // anything anchored past them falls off the canvas
-        add('text', { x: w.xR - 4, y: w.cy - 4, 'text-anchor': 'end' }, `k${w.k}/in${w.kIn} ← ${w.from}`);
-        if (w.targets.length > 1) {
+        const who = w.kind === 'in' ? `→ ${w.to}` : `← ${w.from}`;
+        add('text', { x: w.xR - 4, y: w.cy - 4, 'text-anchor': 'end' }, `k${w.k}/in${w.kIn} ${who}`);
+        if (w.kind === 'in') {
+          // the merge node: several sources join here, then ONE trunk crosses
+          add('circle', { class: 'junction', cx: w.mx, cy: w.my, r: 5 });
+          add('text', { class: 'jlabel', x: w.mx + 8, y: w.my - 6 }, `merge ${w.sources.length} @${Math.round(w.mx)},${Math.round(w.my)}`);
+        } else if (w.targets.length > 1) {
           add('circle', { class: 'junction', cx: w.jx, cy: w.jy, r: 5 });
           add('text', { class: 'jlabel', x: w.jx + 8, y: w.jy - 6 }, `fan ${w.targets.length} @${Math.round(w.jx)},${Math.round(w.jy)}`);
         }
+      }
+    }
+
+    if (document.getElementById('ovDetours').checked) {
+      for (const e of lay.flat) {
+        if (!e.detour) continue;
+        add('path', { class: 'detour', d: `M0,${e.detour.y} H${lay.W}` });
+        add('text', { class: 'dlabel', x: 4, y: e.detour.y - 4 },
+          `${e.from} → ${e.to}${e.detour.bus ? ' (bus)' : ''}`);
       }
     }
 
@@ -169,6 +187,11 @@
         add('circle', { class: 'port', cx: e.b.x, cy: e.y2, r: 2.5 });
       });
       lay.wraps.forEach(w => {
+        if (w.kind === 'in') {
+          for (const t of w.sources) add('circle', { class: 'port', cx: t.p.x + t.p.w, cy: w.srcY1[t.name], r: 2.5 });
+          add('circle', { class: 'port', cx: w.b.x, cy: w.entryY, r: 2.5 });
+          return;
+        }
         add('circle', { class: 'port', cx: w.a.x + w.a.w, cy: w.y1, r: 2.5 });
         if (w.targets.length === 1) add('circle', { class: 'port', cx: w.targets[0].p.x, cy: w.entryY, r: 2.5 });
         else for (const t of w.targets) add('circle', { class: 'port', cx: t.p.x, cy: w.fanY[t.name], r: 2.5 });
@@ -178,12 +201,14 @@
     svg.appendChild(g);
     document.getElementById('stats').textContent =
       `${lay.nRows} row${lay.nRows === 1 ? '' : 's'} · ${Object.keys(lay.pos).length} nodes · ` +
-      `${lay.flat.length} same-row edges · ${lay.wraps.length} wrap group${lay.wraps.length === 1 ? '' : 's'} · ` +
+      `${lay.flat.length} same-row edges (${lay.flat.filter(e => e.detour).length} routed) · ` +
+      `${lay.wraps.length} wrap group${lay.wraps.length === 1 ? '' : 's'} ` +
+      `(${lay.wraps.filter(w => w.kind === 'in').length} fan-in) · ` +
       `canvas ${Math.round(lay.W)}x${Math.round(lay.H)}`;
   }
 
   sel.onchange = draw;
-  ['ovLanes', 'ovPorts', 'ovRows'].forEach(id => { document.getElementById(id).onchange = draw; });
+  ['ovLanes', 'ovPorts', 'ovRows', 'ovDetours'].forEach(id => { document.getElementById(id).onchange = draw; });
   draw();
 })();
 </script>
