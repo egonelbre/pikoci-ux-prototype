@@ -620,8 +620,8 @@
         <div class="tbl-scroll"><table class="tbl ctbl">
         ${e.history.map((h, i) => `<tr>
           <td width="24">${h.ok ? '<span class="c-succeeded">✓</span>' : '<span class="c-failed">✕</span>'}</td>
-          <td><code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}</td>
-          <td class="mut small">${esc(h.build)}</td>
+          <td class="nowrap"><code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}</td>
+          <td class="mut small" style="width:100%">${esc(h.build)}</td>
           <td class="mut small nowrap r">${ago(h.at)}</td>
           <td class="r">${i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : ''}</td>
         </tr>`).join('')}

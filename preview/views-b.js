@@ -635,15 +635,15 @@
       <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th></th><th>build</th><th>needs</th><th>why it waits</th><th class="r">waiting</th><th class="r"></th></tr></thead>
       ${pend.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-pending">⏳</td>
-        <td class="ct-title"><div class="ctt"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></div></td>
-        <td><code>${esc(b.queue.tag)}</code></td>
+        <td class="nowrap"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
+        <td class="nowrap"><code>${esc(b.queue.tag)}</code></td>
         <td class="${b.queue.matching === 0 && !poolFor(b.queue.tag) ? 'c-failed' : 'mut'} small">${b.queue.matching === 0
           ? (poolFor(b.queue.tag)
             ? `<span class="c-pending">pool ${esc(poolFor(b.queue.tag).name)} scaling up from zero (~${poolFor(b.queue.tag).bootSecs}s boot) — capacity on the way, not a config problem</span>`
             : `no healthy worker with tag "${esc(b.queue.tag)}" and no pool serves it — config problem, not load`)
           : `${b.queue.matching} matching worker, busy${b.queue.ahead ? ` · ${b.queue.ahead} ahead` : ''}`}</td>
         <td class="mut small r nowrap">${ago(b.start)}</td>
-        <td class="r"><button class="btn sm" data-act="cancel" data-arg="${b.id}" onclick="event.stopPropagation()">Cancel</button></td>
+        <td class="r nowrap"><button class="btn sm" data-act="cancel" data-arg="${b.id}" onclick="event.stopPropagation()">Cancel</button></td>
       </tr>`).join('')}</table></div>` : '<div class="allclear">✓ Queue is empty — new jobs start as soon as a matching worker is free.</div>'}
       ${tags.length ? `<h2>Capacity by tag</h2>
       <div class="tbl-scroll"><table class="tbl ctbl"><thead><tr><th>tag</th><th>healthy workers</th><th class="r">busy</th><th class="r">queued</th></tr></thead>
@@ -651,16 +651,16 @@
       const m = online.filter(w => w.tags.includes(t));
       const bp = booting.filter(w => w.tags.includes(t));
       const pool = poolFor(t);
-      return `<tr><td><code>${esc(t)}</code></td>
+      return `<tr><td class="nowrap"><code>${esc(t)}</code></td>
         <td>${m.length ? m.map(w => `<b>${esc(w.name)}</b>`).join(', ') : ''}${bp.length ? `${m.length ? ', ' : ''}<span class="c-pending">${bp.map(w => esc(w.name)).join(', ')} (booting)</span>` : ''}${!m.length && !bp.length ? (pool ? `<span class="c-pending">pool ${esc(pool.name)} · scaled to zero, scales 0–${pool.max} on demand</span>` : '<span class="c-failed">none — and no pool serves this tag</span>') : ''}</td>
-        <td class="r">${m.reduce((s, w) => s + (w.running || 0), 0)}</td>
-        <td class="r">${pend.filter(b => b.queue.tag === t).length}</td></tr>`;
+        <td class="r nowrap">${m.reduce((s, w) => s + (w.running || 0), 0)}</td>
+        <td class="r nowrap">${pend.filter(b => b.queue.tag === t).length}</td></tr>`;
     }).join('')}</table></div>` : ''}
       <h2>Running</h2>
       ${running.length ? `<div class="tbl-scroll"><table class="tbl ctbl">
       ${running.map(b => `<tr onclick="location.hash='#/b/${b.id}'">
         <td class="c-started pulse">●</td>
-        <td class="ct-title"><div class="ctt"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></div></td>
+        <td class="nowrap"><a class="row-link" href="#/b/${b.id}"><b>${esc(b.pipeline)}/${esc(b.job)}</b> #${b.n}</a></td>
         <td class="mut small">on <b>${esc(b.worker)}</b></td>
         <td class="mut small r nowrap" data-live>${fmtDur(bDur(b))}</td>
       </tr>`).join('')}</table></div>` : '<div class="mut pad-s small">nothing running right now</div>'}
@@ -693,11 +693,11 @@
         <td class="nowrap">${w.status === 'provisioning'
         ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
         : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${P.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
-        <td>${w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>'}</td>
+        <td class="nowrap">${w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>'}</td>
         <td>${w.tags.map(t => `<code>${t}</code>`).join(' ')}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : cpu(w)}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : disk(w)}</td>
-        <td class="mut small">${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}</td>
+        <td class="mut small nowrap">${w.version}${w.version < 'v0.9.4' ? ' <span class="chip" title="older than the server">behind</span>' : ''}</td>
         <td class="r">${w.running ? `${w.running}/${w.concurrency} busy` : w.status === 'provisioning' ? '' : '<span class="mut">idle</span>'}</td>
         <td class="r">${w.status === 'provisioning' ? '' : `<button class="btn sm" data-act="drain" data-arg="${esc(w.name)}" onclick="event.stopPropagation()" title="drain is worker-side today (SIGQUIT); click for details">drain</button>`}</td>
       </tr>`;
@@ -845,8 +845,8 @@
     return `<div class="page"><h1>Audit${P.team() ? ` <span class="mut small">· team ${esc(P.team())}</span>` : ''}</h1>
       ${rows.length ? '' : `<div class="mut pad">No recorded actions for team ${esc(P.team())} in the demo window.</div>`}
       <div class="tbl-scroll"><table class="tbl"><thead><tr><th>when</th><th>who</th><th>action</th><th>target</th><th>detail</th></tr></thead>
-      ${rows.map(a => `<tr><td class="mut small nowrap">${ago(a.at)}</td><td><b>${esc(a.user)}</b></td>
-        <td><code>${esc(a.action)}</code></td><td>${esc(a.target)}</td><td class="mut small">${esc(a.detail)}</td></tr>`).join('')}</table></div>
+      ${rows.map(a => `<tr><td class="mut small nowrap">${ago(a.at)}</td><td class="nowrap"><b>${esc(a.user)}</b></td>
+        <td class="nowrap"><code>${esc(a.action)}</code></td><td class="nowrap">${esc(a.target)}</td><td class="mut small">${esc(a.detail)}</td></tr>`).join('')}</table></div>
       <p class="mut small">Every action in the preview writes here — approvals record what they were bound to; holds, releases, supersessions, pins and pauses carry actor + reason.</p></div>`;
   };
 
