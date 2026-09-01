@@ -80,5 +80,6 @@
     }
   });
 
+  Pal.render = renderPalette;
   PK.pal = Pal;
 })(window.PK = window.PK || {});

@@ -16,7 +16,7 @@
     return `<header>
       <a class="logo" href="#/"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.15em;vertical-align:-0.2em"> PikoCI <span class="preview-tag">preview</span></a>
       <select class="team-sel" aria-label="team scope" title="team scope — filters every page (maps to the backend's team scoping)"
-        onchange="PK.app.setTeam(this.value)">
+        data-state="app.team">
         <option value="">all teams</option>
         ${D().teams.map(t => `<option value="${esc(t.name)}" ${tsel === t.name ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
       </select>
@@ -26,7 +26,7 @@
       ${attn.items.length ? `<a href="#/" class="attn-badge" title="items needing you">${attn.items.length}</a>` : ''}
       <span class="sp"></span>
       <button class="ghost" data-act="theme" title="toggle theme">◐</button>
-      <button class="ghost" data-palette-btn aria-label="open command palette" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true}))">⌘K</button>
+      <button class="ghost" data-palette-btn aria-label="open command palette" data-act="palette">⌘K</button>
       <a class="${sec === 'settings' ? 'on' : ''}" href="#/settings">egon ⚙</a>
     </header>`;
   };

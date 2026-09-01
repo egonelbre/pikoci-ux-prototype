@@ -6,17 +6,19 @@
   window.VIEWS = window.VIEWS || {};
   const { esc, ago } = PK.fmt;
   const { st } = PK.status;
-  const { dataTable } = PK.ui;
+  const { dataTable, filterBar } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Changes: dense table (built for 100s of open PRs) -------------
-  let chgFilter = '', chgChip = 'all', chgBots = true;
-  window._chgF = v => { chgFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._chgC = c => { chgChip = c; PK.app.refresh(); };
-  window._chgB = () => { chgBots = !chgBots; PK.app.refresh(); };
-  let brFilter = '', brChip = 'active';
-  window._brF = v => { brFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._brC = c => { brChip = c; PK.app.refresh(); };
+  const chg = {
+    filter: PK.state.use('changes.filter', ''),
+    chip: PK.state.use('changes.chip', 'all'),
+    bots: PK.state.use('changes.bots', true),
+  };
+  const br = {
+    filter: PK.state.use('repos.filter', ''),
+    chip: PK.state.use('repos.chip', 'active'),
+  };
 
   VIEWS.changes = function (tab, prN) {
     tab = tab || 'open';
@@ -29,27 +31,27 @@
       // lint/verify pipelines land in ONE inbox, scoped by the team dropdown
       let ls = PK.model.lineages().filter(l => tab === 'open' || PK.model.mine(l));
       const total = ls.length;
-      if (!chgBots) ls = ls.filter(l => !l.bot);
+      if (!chg.bots.get()) ls = ls.filter(l => !l.bot);
       const held = l => !l.summary && D().builds.some(b => b.heldReason && Object.values(b.intent.versions)[0] === PK.model.lineageHead(l).id.ref);
-      if (chgChip === 'failing') ls = ls.filter(l => PK.model.lineageStatus(l) === 'failed');
-      else if (chgChip === 'running') ls = ls.filter(l => ['started', 'pending'].includes(PK.model.lineageStatus(l)));
-      else if (chgChip === 'held') ls = ls.filter(held);
-      else if (chgChip === 'drafts') ls = ls.filter(l => l.draft);
-      if (chgFilter) {
-        const q = chgFilter.toLowerCase();
+      if (chg.chip.get() === 'failing') ls = ls.filter(l => PK.model.lineageStatus(l) === 'failed');
+      else if (chg.chip.get() === 'running') ls = ls.filter(l => ['started', 'pending'].includes(PK.model.lineageStatus(l)));
+      else if (chg.chip.get() === 'held') ls = ls.filter(held);
+      else if (chg.chip.get() === 'drafts') ls = ls.filter(l => l.draft);
+      if (chg.filter.get()) {
+        const q = chg.filter.get().toLowerCase();
         ls = ls.filter(l => (l.n + ' ' + l.title + ' ' + l.author + ' ' + l.branch + ' ' + (l.pl || 'pikoci-pr')).toLowerCase().includes(q));
       }
       ls.sort((a, b) => (PK.model.mine(b) ? 1 : 0) - (PK.model.mine(a) ? 1 : 0) || b.updated - a.updated);
       const shown = ls.slice(0, 200);
-      const chip = (k, lbl) => `<button class="chip-btn ${chgChip === k ? 'on' : ''}" onclick="_chgC('${k}')">${lbl}</button>`;
       body = `
-      <div class="ctoolbar">
-        <input data-filter aria-label="filter changes" placeholder="filter #, title, author, branch, repo…  ( / )" value="${esc(chgFilter)}" oninput="_chgF(this.value)">
-        ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● started')}${chip('held', '⛔ held')}${chip('drafts', 'drafts')}
-        <label class="small mut"><input type="checkbox" ${chgBots ? 'checked' : ''} onchange="_chgB()"> bots</label>
-        <span class="sp"></span>
-        <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${PK.model.team() ? ' in ' + esc(PK.model.team()) : ''}</span>
-      </div>
+      ${filterBar({
+        filterKey: 'changes.filter', chipKey: 'changes.chip',
+        label: 'filter changes',
+        placeholder: 'filter #, title, author, branch, repo…  ( / )',
+        chips: [['all', 'all'], ['failing', '✕ failing'], ['running', '● started'], ['held', '⛔ held'], ['drafts', 'drafts']],
+        extra: `<label class="small mut"><input type="checkbox" data-state="changes.bots" ${chg.bots.get() ? 'checked' : ''}> bots</label>`,
+        count: `${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${PK.model.team() ? ' in ' + esc(PK.model.team()) : ''}`,
+      })}
       ${dataTable({
         layout: 'fixed',
         cols: [
@@ -100,7 +102,7 @@
       // commit in 30d) stay hidden until "all" or search. Feature branches
       // never appear at all — they enter as PRs (Open PRs).
       const rows = PK.model.branchIndex();
-      const q = (brFilter || '').toLowerCase();
+      const q = (br.filter.get() || '').toLowerCase();
       const terms = q.split(/\s+/).filter(Boolean);
       const quiet = r => Date.now() - r.lastAt > 30 * 86400e3;
       const rank = r => r.status === 'paused' ? 6.5 : (PK.status.RANK[r.status] !== undefined ? PK.status.RANK[r.status] : 9);
@@ -108,15 +110,14 @@
       // reachable via "all" and search, not something to shout about
       const attn = r => ['failed', 'waiting_for_approval', 'held'].includes(r.status) && !quiet(r);
       const match = r => { const hay = (r.repo + ' ' + r.branch + ' ' + r.name).toLowerCase(); return terms.every(t => hay.includes(t)); };
-      const C = (k, lbl) => `<button class="chip-btn ${brChip === k ? 'on' : ''}" onclick="_brC('${k}')">${lbl}</button>`;
       const groups = {};
       for (const r of rows) (groups[r.repo] = groups[r.repo] || []).push(r);
       const CAPB = 60;
       let shownBranches = 0;
       const glist = Object.entries(groups).map(([repo, g]) => {
         const vis = q ? g.filter(match)
-          : brChip === 'attention' ? g.filter(attn)
-            : brChip === 'active' ? g.filter(r => !quiet(r)) : g;
+          : br.chip.get() === 'attention' ? g.filter(attn)
+            : br.chip.get() === 'active' ? g.filter(r => !quiet(r)) : g;
         const sorted = vis.slice().sort((a, b) => (rank(a) - rank(b)) || (b.lastAt - a.lastAt));
         const alive = g.filter(r => !quiet(r));
         const pool = alive.length ? alive : g;
@@ -155,12 +156,13 @@
         x.sorted.slice(0, CAPB).forEach(r => brRows.push(brRow(r)));
         if (x.sorted.length > CAPB) brRows.push({ raw: `<tr><td></td><td colspan="5" class="mut small">first ${CAPB} of ${x.sorted.length} branches — narrow with the filter</td></tr>` });
       }
-      body = `<div class="ctoolbar">
-          <input data-filter aria-label="filter repos and branches" placeholder="filter repo, branch…  ( / )" value="${esc(brFilter)}" oninput="_brF(this.value)">
-          ${C('active', 'active')}${C('attention', '✕ needs attention')}${C('all', 'all')}
-          <span class="sp"></span>
-          <span class="mut small">${glist.length} repos · ${shownBranches} of ${rows.length} branches${!q && brChip === 'active' ? ' · quiet (no commit in 30d) hidden' : ''}</span>
-        </div>
+      body = `${filterBar({
+        filterKey: 'repos.filter', chipKey: 'repos.chip',
+        label: 'filter repos and branches',
+        placeholder: 'filter repo, branch…  ( / )',
+        chips: [['active', 'active'], ['attention', '✕ needs attention'], ['all', 'all']],
+        count: `${glist.length} repos · ${shownBranches} of ${rows.length} branches${!q && br.chip.get() === 'active' ? ' · quiet (no commit in 30d) hidden' : ''}`,
+      })}
         ${glist.length ? dataTable({
         layout: 'fixed',
         cols: [

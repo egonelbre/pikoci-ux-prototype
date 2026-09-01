@@ -159,6 +159,18 @@
       document.documentElement.setAttribute('data-theme', cur === 'light' ? 'dark' : 'light');
       app.refresh();
     },
+    // the header button and the keyboard shortcut open the same palette
+    palette() { PK.pal.open = !PK.pal.open; PK.pal.q = ''; PK.pal.render(); },
+    // "copy" next to a command line: the <pre> is the button's previous sibling
+    copyprev(_arg, el) {
+      const pre = el && el.previousElementSibling;
+      if (!pre || !navigator.clipboard) return toast('Clipboard not available', 'info');
+      // a denied clipboard (headless, insecure context, user policy) rejects —
+      // say so rather than leaving an unhandled rejection in the console
+      navigator.clipboard.writeText(pre.textContent).then(
+        () => toast('Copied'),
+        () => toast('Could not copy — select the line and copy manually', 'info'));
+    },
     noop() { toast('Not wired in the preview'); },
   };
   // capture phase: in-row buttons stopPropagation() to suppress the row's
@@ -168,7 +180,9 @@
     if (!el) return;
     e.preventDefault();
     const [fn, arg] = [el.getAttribute('data-act'), el.getAttribute('data-arg')];
-    if (ACT[fn]) ACT[fn](arg);
+    // the element is passed too, for the few actions that act on their
+    // surroundings rather than on an id (copy-the-line-above)
+    if (ACT[fn]) ACT[fn](arg, el);
   }, true);
 
   PK.act = ACT;

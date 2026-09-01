@@ -4,7 +4,8 @@
   'use strict';
   window.VIEWS = window.VIEWS || {};
   const { esc, fmtDur } = PK.fmt;
-  const { dataTable } = PK.ui;
+  const { dataTable, filterBar } = PK.ui;
+  PK.state.use('checks.filter', '');
 
   // ---------- structured checks + measurements on the build page ------------
   // Tests as objects, not grepped log lines (G2): stable ids give per-test
@@ -62,10 +63,14 @@
       // flat list (the rare set); everything else rolls up per package,
       // slowest first, expanding one package at a time; the filter finds a
       // single test by name across the whole suite.
-      const q = (window._tq || '').toLowerCase();
-      out += `<div class="ctoolbar gap-s"><input aria-label="find a test" placeholder="find a test by name…" value="${esc(window._tq || '')}"
-        oninput="window._tq=this.value;PK.app.refresh();const f=[...document.querySelectorAll('input[aria-label=&quot;find a test&quot;]')][0];if(f){f.focus();f.setSelectionRange(999,999)}">
-        <span class="sp"></span><span class="mut small">${b.tests.length} tests</span></div>`;
+      const q = (PK.state.get('checks.filter') || '').toLowerCase();
+      out += filterBar({
+        cls: 'gap-s',
+        filterKey: 'checks.filter',
+        label: 'find a test',
+        placeholder: 'find a test by name…',
+        count: `${b.tests.length} tests`,
+      });
       if (q) {
         const hits = b.tests.filter(t => t.id.toLowerCase().includes(q));
         out += hits.length ? dataTable({

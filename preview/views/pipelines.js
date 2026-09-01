@@ -5,13 +5,14 @@
   window.VIEWS = window.VIEWS || {};
   const { esc, fmtDur, ago } = PK.fmt;
   const { st } = PK.status;
-  const { dataTable } = PK.ui;
+  const { dataTable, filterBar } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Pipelines: dense data table (weather + duration trend) --------
-  let pipFilter = '', pipChip = 'all';
-  window._pipF = v => { pipFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._pipC = c => { pipChip = c; PK.app.refresh(); };
+  const pip = {
+    filter: PK.state.use('pipelines.filter', ''),
+    chip: PK.state.use('pipelines.chip', 'all'),
+  };
 
   // weather: last-10 outcomes as ticks + a summary glyph from the pass rate
   VIEWS.weather = function (hist) {
@@ -20,7 +21,7 @@
     const glyph = ok >= 0.9 ? '☀' : ok >= 0.7 ? '🌤' : ok >= 0.5 ? '⛅' : ok >= 0.3 ? '🌧' : '⛈';
     const ticks = hist.map(h => {
       const t = `<span class="wx-t" style="background:${st(h.status).color}" title="${st(h.status).label} · ${fmtDur(h.dur)}"></span>`;
-      return h.id ? `<a href="#/b/${h.id}" onclick="event.stopPropagation()">${t}</a>` : t;
+      return h.id ? `<a href="#/b/${h.id}">${t}</a>` : t;
     }).join('');
     return `<span class="wx" title="${Math.round(ok * 100)}% of last ${hist.length} succeeded"><span class="wx-g">${glyph}</span>${ticks}</span>`;
   };
@@ -42,12 +43,12 @@
     let pls = PK.model.pipelines();
     const total = pls.length;
     const isPR = pl => pl.primaryContext.kind === 'lineages';
-    if (pipChip === 'failing') pls = pls.filter(pl => PK.model.primaryStatus(pl) === 'failed' || (isPR(pl) && PK.model.secondaryCounts(pl).failing));
-    else if (pipChip === 'running') pls = pls.filter(pl => ['started', 'pending'].includes(PK.model.primaryStatus(pl)) || (isPR(pl) && PK.model.secondaryCounts(pl).running));
-    else if (pipChip === 'paused') pls = pls.filter(pl => pl.paused);
-    else if (pipChip === 'pr') pls = pls.filter(isPR);
-    if (pipFilter) {
-      const q = pipFilter.toLowerCase();
+    if (pip.chip.get() === 'failing') pls = pls.filter(pl => PK.model.primaryStatus(pl) === 'failed' || (isPR(pl) && PK.model.secondaryCounts(pl).failing));
+    else if (pip.chip.get() === 'running') pls = pls.filter(pl => ['started', 'pending'].includes(PK.model.primaryStatus(pl)) || (isPR(pl) && PK.model.secondaryCounts(pl).running));
+    else if (pip.chip.get() === 'paused') pls = pls.filter(pl => pl.paused);
+    else if (pip.chip.get() === 'pr') pls = pls.filter(isPR);
+    if (pip.filter.get()) {
+      const q = pip.filter.get().toLowerCase();
       pls = pls.filter(pl => (pl.team + '/' + pl.name + ' ' + pl.desc).toLowerCase().includes(q));
     }
     const order = s => s === 'failed' ? 0 : s === 'started' ? 1 : 2;
@@ -85,14 +86,14 @@
         g.forEach(pl => rows.push(row(pl)));
       }
     } else sorted(pls).forEach(pl => rows.push(row(pl)));
-    const chip = (k, lbl) => `<button class="chip-btn ${pipChip === k ? 'on' : ''}" onclick="_pipC('${k}')">${lbl}</button>`;
     return `<div class="page"><h1>Pipelines</h1>
-      <div class="ctoolbar">
-        <input data-filter aria-label="filter pipelines" placeholder="filter team, name, description…  ( / )" value="${esc(pipFilter)}" oninput="_pipF(this.value)">
-        ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● started')}${chip('paused', '❚❚ paused')}${chip('pr', '⇅ PR checks')}
-        <span class="sp"></span>
-        <span class="mut small">${pls.length} of ${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span>
-      </div>
+      ${filterBar({
+      filterKey: 'pipelines.filter', chipKey: 'pipelines.chip',
+      label: 'filter pipelines',
+      placeholder: 'filter team, name, description…  ( / )',
+      chips: [['all', 'all'], ['failing', '✕ failing'], ['running', '● started'], ['paused', '❚❚ paused'], ['pr', '⇅ PR checks']],
+      count: `${pls.length} of ${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}`,
+    })}
       ${dataTable({
       className: 'ptbl',
       layout: 'fixed',

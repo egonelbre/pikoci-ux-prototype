@@ -69,7 +69,7 @@
 
     // --- sidebar: this build's steps — click = expand (if folded) + scroll to it
     const sideSteps = b.steps.map((sp, i) => `<button type="button" class="jrow st"
-      onclick="const x=document.getElementById('step-${i}');if(!x)return;const d=x.querySelector('.step-head + div');if(d&&d.hidden){d.hidden=false;x.querySelector('.step-head').setAttribute('aria-expanded','true')}x.scrollIntoView({behavior:'smooth'})">
+      data-open-step="step-${i}" data-scroll="step-${i}">
       <span class="c-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
       <span class="mut small type">${sp.type}</span><span class="jname">${esc(sp.name)}</span>
       <span class="mut small nowrap">${sp.dur ? fmtDur(sp.dur) : ''}</span></button>`).join('')
@@ -111,7 +111,7 @@
           <details class="b2-det" data-det="local:${b.id}"><summary>run locally</summary>
             same job, same config, your working tree:
             <pre class="cmdline">pikoci run -p pipeline.hcl -j ${esc(b.job)} --resource ${esc(Object.keys(b.intent.versions)[0])}=./</pre>
-            <button class="btn sm" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.previousElementSibling.textContent);PK.toast('Copied')">copy</button>
+            <button class="btn sm" data-act="copyprev">copy</button>
           </details>
           <div class="b2-det mut"><span class="kbd">f</span> next failure · <span class="kbd">⌘K</span> actions</div>
         </aside>
@@ -120,7 +120,7 @@
           ${b.status === 'waiting_for_approval' ? `<div class="appr-card">
             <div><b>⧖ ${esc(j.approve.name)}</b> — 1 of ${j.approve.need} approvals</div>
             <div class="mut small">bound to <code>${esc(ref)}</code> @ config rev ${b.intent.configRev} · maria approved ${ago(Date.now() - 12 * 60e3)}
-              · <a href="javascript:void(0)" onclick="document.getElementById('cmpbox')&&(document.getElementById('cmpbox').hidden=false)">diff since last deploy</a></div>
+              · <a href="javascript:void(0)" data-reveal="cmpbox">diff since last deploy</a></div>
             ${newerExists ? `<div class="warn-line">⚠ <b>superseded-while-waiting</b>: trunk has moved past <code>${esc(ref)}</code> — approving deploys the bound version, not the newest.</div>` : ''}
             <div class="mut small">while gated the build holds no worker and nothing has run — on approval it queues, then starts.</div>
             <div class="rejbox" id="rejbox-${b.id}" hidden data-fold="rej:${b.id}">
@@ -131,7 +131,7 @@
 
           ${failIdx >= 0 ? `<div class="err-first">
             <div class="err-head">✕ first failure: ${esc(b.steps[failIdx].name)}
-              <a href="javascript:void(0)" onclick="document.getElementById('step-${failIdx}').scrollIntoView({behavior:'smooth'})">jump ↓</a></div>
+              <a href="javascript:void(0)" data-scroll="step-${failIdx}">jump ↓</a></div>
             <pre class="log excerpt">${b.steps[failIdx].log.filter(l => /FAIL|ERROR|Error /.test(l)).slice(0, 4).map(l => `<span class="l-err">${esc(l)}</span>`).join('\n')}</pre>
           </div>` : ''}
 
@@ -152,8 +152,7 @@
           </div></div>` : ''}
           <div id="steps">
           ${b.steps.map((sp, i) => `<div class="step" id="step-${i}">
-            <button class="step-head" aria-expanded="${sp.status === 'failed' || sp.status === 'started'}"
-              onclick="const x=this.nextElementSibling;x.hidden=!x.hidden;this.setAttribute('aria-expanded',!x.hidden)">
+            <button class="step-head" aria-expanded="${sp.status === 'failed' || sp.status === 'started'}" data-toggle-next>
               <span class="c-${sp.status} ${sp.status === 'started' ? 'pulse' : ''}">${st(sp.status).sym}</span>
               <span class="mut small type">${sp.type}</span><b>${esc(sp.name)}</b>
               <span class="sp"></span><span class="mut small">${sp.dur ? fmtDur(sp.dur) : ''}</span>

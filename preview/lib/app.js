@@ -83,4 +83,8 @@
 
   PK.app = App;
   PK.app.setTeam = setTeam;
+
+  // the team <select> binds to this like any other state, but the value lives
+  // in the session and its setter announces the change
+  PK.state.define('app.team', { get: () => App.session.team, set: setTeam });
 })(window.PK = window.PK || {});

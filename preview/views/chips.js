@@ -14,7 +14,7 @@
     const fam = PK.status.REASON[d.code] ? PK.status.REASON[d.code].family : 'waiting';
     return `<span class="reason-wrap"><button class="reason ${fam}" aria-expanded="false" aria-controls="${id}"
       aria-label="${esc(reasonLabel(d))}"
-      onclick="event.stopPropagation();const p=document.getElementById('${id}');const open=p.hidden;p.hidden=!open;this.setAttribute('aria-expanded',open)"
+      data-toggle="${id}"
       title="${esc(reasonLabel(d))}">${fam === 'waiting' ? '…' : '∅'}</button>
       <span id="${id}" hidden data-fold="${esc(key)}" class="reason-detail"><b>${esc(reasonLabel(d))}</b> — ${esc(d.text)}${ctx ? ' · ' + esc(ctx) : ''}</span></span>`;
   };

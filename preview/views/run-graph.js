@@ -53,7 +53,7 @@
         const s = c.status;
         timing = c.build.end ? fmtDur(bDur(c.build)) : (s === 'held' ? 'held' : c.build.status === 'pending' ? 'queued' : 'started');
         fill = st(s).color;
-        click = `onclick="location.hash='#/b/${c.build.id}'"`;
+        click = `data-nav="#/b/${c.build.id}"`;
       } else if (c.kind === 'decision') {
         timing = PK.status.REASON[c.decision.code] && PK.status.REASON[c.decision.code].family === 'wont_run' ? "won't run" : 'waiting';
         fill = 'var(--mut3)';
@@ -127,12 +127,12 @@
         const hasBar = b.start && (b.end || b.status === 'started');
         const tail = b.end ? fmtDur(bDur(b)) : (s === 'held' ? 'held' : b.status === 'pending' ? 'queued' : fmtDur(bDur(b)) + '…');
         return `<div class="wf-row">
-          <div class="wf-lbl click" onclick="location.hash='#/b/${b.id}'" title="open ${esc(j.name)} #${b.n}"><span class="c-${s} ${b.status === 'started' ? 'pulse' : ''}">${st(s).sym}</span>${name}
-            <a class="wf-n small" href="#/b/${b.id}" onclick="event.stopPropagation()">#${b.n}</a>
+          <div class="wf-lbl click" data-nav="#/b/${b.id}" title="open ${esc(j.name)} #${b.n}"><span class="c-${s} ${b.status === 'started' ? 'pulse' : ''}">${st(s).sym}</span>${name}
+            <a class="wf-n small" href="#/b/${b.id}">#${b.n}</a>
             <span class="wf-d mut small">${esc(tail)}</span></div>
           <div class="wf-lane">${gridLines}${hasBar ? `<div class="wf-bar ${b.status === 'started' ? 'pulse' : ''}"
             style="left:${leftOf(b)}%;width:${Math.max(endOf(b) - leftOf(b), 1)}%;background:${st(s).color}"
-            onclick="location.hash='#/b/${b.id}'" title="${esc(j.name)} #${b.n}: ${st(s).label}"></div>`
+            data-nav="#/b/${b.id}" title="${esc(j.name)} #${b.n}: ${st(s).label}"></div>`
           : `<span class="wf-ghost" style="left:2%">${s === 'held' ? '⛔ held — awaiting maintainer' : b.queue ? (b.queue.matching === 0 ? `queued — no worker with tag "${esc(b.queue.tag)}"` : `queued — ${b.queue.matching} matching worker, busy`) : 'queued'}</span>`}</div>
         </div>`;
       }

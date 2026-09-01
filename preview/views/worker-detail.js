@@ -8,12 +8,8 @@
   const D = () => window.DATA;
 
   // ---------- Worker detail: cpu/disk overlaid, runs as bands ---------------
-  let wkRange = 168; // hours shown: 168 / 24 / 6
-  window._wkR = h => { wkRange = h; PK.app.refresh(); };
-  window._wkHi = (i, on) => { // hover a run row → light its band on the chart
-    const el = document.querySelector(`[data-run="${i}"]`);
-    if (el) { el.style.opacity = on ? 0.6 : ''; el.style.stroke = on ? 'var(--fg)' : ''; el.style.strokeWidth = on ? 1.5 : ''; }
-  };
+  // hours shown on the telemetry chart: 168 / 24 / 6
+  const wkR = PK.state.use('worker.range', 168);
 
   function weekChart(wk, rangeH, runs, samples) {
     const W = 1090, padL = 42, padR = 10, plotH = 120, padT = 12, axH = 22;
@@ -25,7 +21,7 @@
       const bw = Math.max(2.5, r.durM / 60 / rangeH * span);
       const big = Math.abs(r.dDisk) >= 0.02;
       return `<rect data-run="${i}" x="${x(r.agoH).toFixed(1)}" y="${padT}" width="${bw.toFixed(1)}" height="${plotH}"
-        ${r.bid ? `onclick="location.hash='#/b/${r.bid}'" style="cursor:pointer"` : ''}
+        ${r.bid ? `data-nav="#/b/${r.bid}" style="cursor:pointer"` : ''}
         fill="${r.dDisk < 0 ? 'var(--ok, #2a2)' : 'var(--accent)'}" opacity="${r.dDisk < 0 ? 0.28 : big ? 0.32 : 0.10}">
         <title>${esc(r.pipeline)}/${esc(r.job)}${r.n ? ' #' + r.n : ''} · ${r.durM}m · disk ${r.dDisk >= 0 ? '+' : ''}${(r.dDisk * 100).toFixed(1)}%${r.bid ? ' — click to open' : ''}</title></rect>`;
     }).join('');
@@ -62,7 +58,8 @@
     if (!w) return '<div class="page">Worker not found — <a href="#/workers">workers</a></div>';
     const pool = w.pool && D().pools.find(p => p.name === w.pool);
     const wk = w.week;
-    const rangeH = wk ? Math.min(wkRange, wk.hours) : 0;
+    const range = Number(wkR.get());   // data-value arrives as a string
+    const rangeH = wk ? Math.min(range, wk.hours) : 0;
     const runsF = wk ? wk.runs.filter(r => r.agoH <= rangeH) : [];
     const samplesF = wk ? wk.samples.filter(s => s.agoH <= rangeH) : [];
     // "what fills the disk": aggregate the visible range's runs by job
@@ -74,7 +71,7 @@
     }
     const rows = Object.values(agg).sort((a, b) => b.dDisk - a.dDisk);
     const maxAbs = Math.max(0.001, ...rows.map(r => Math.abs(r.dDisk)));
-    const rtab = (h, lbl) => `<button class="chip-btn ${wkRange === h ? 'on' : ''}" onclick="_wkR(${h})">${lbl}</button>`;
+    const rtab = (h, lbl) => `<button class="chip-btn ${range === h ? 'on' : ''}" data-state="worker.range" data-value="${h}">${lbl}</button>`;
     return `<div class="page">
       <div class="crumbs"><a href="#/workers">workers</a> / <b>${esc(w.name)}</b>
         ${w.status === 'provisioning' ? '<span class="c-pending pulse">◌ provisioning</span>'
@@ -87,7 +84,7 @@
         <button class="btn" data-act="drain" data-arg="${esc(w.name)}" title="drain is worker-side today (SIGQUIT); click for details">drain</button></div>
       ${w.status === 'stale' ? `<div class="warnbox">⚠ No heartbeat for ${ago(w.lastSeen)} — telemetry below ends there; nothing is fabricated past the last report.</div>` : ''}
       ${wk ? `
-      <h2>${w.ephemeral && wk.hours < wkRange ? 'This instance’s lifetime' : 'Usage'}
+      <h2>${w.ephemeral && wk.hours < range ? 'This instance’s lifetime' : 'Usage'}
         <span class="tabs-inline">${rtab(168, '7 days')}${rtab(24, '1 day')}${rtab(6, '6 hours')}</span>
         <span class="mut small">— cpu &amp; disk overlaid with the runs that produced them (hover a band or a run row; green = cleanup)</span></h2>
       ${weekChart(wk, rangeH, runsF, samplesF)}
@@ -125,7 +122,8 @@
         rows: runsF.map((r, i) => ({ r, i })).sort((a, b) => a.r.agoH - b.r.agoH).slice(0, 14).map(({ r, i }) => ({
           nav: r.bid ? `#/b/${r.bid}` : null,
           // hovering the row lights its band on the chart above
-          attrs: `onmouseenter="_wkHi(${i},1)" onmouseleave="_wkHi(${i},0)"${r.bid ? '' : ' style="cursor:default"'}`,
+          // hovering the row lights its band on the chart above
+          attrs: `data-hilite="[data-run=&quot;${i}&quot;]"${r.bid ? '' : ' style="cursor:default"'}`,
           cells: [
             `${r.agoH}h ago`,
             `${esc(r.pipeline)}/${esc(r.job)}${r.n ? ` <span class="mut small">#${r.n}</span>` : ''}`,

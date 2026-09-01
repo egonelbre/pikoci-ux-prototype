@@ -3,13 +3,14 @@
   'use strict';
   window.VIEWS = window.VIEWS || {};
   const { esc, ago } = PK.fmt;
-  const { dataTable } = PK.ui;
+  const { dataTable, filterBar } = PK.ui;
   const D = () => window.DATA;
 
   // ---------- Environments --------------------------------------------------
-  let envFilter = '', envChip = 'all';
-  window._envF = v => { envFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._envC = c => { envChip = c; PK.app.refresh(); };
+  const env = {
+    filter: PK.state.use('environments.filter', ''),
+    chip: PK.state.use('environments.chip', 'all'),
+  };
 
   VIEWS.environments = function (name) {
     if (name) return VIEWS.envDetail(name);
@@ -18,15 +19,14 @@
     // attention first: drift, then verifying, then quiet greens (newest deploy first)
     const order = e => e.drift ? 0 : !e.verified ? 1 : 2;
     const attn = envs.filter(e => order(e) < 2).length;
-    if (envChip === 'attention') envs = envs.filter(e => order(e) < 2);
-    else if (envChip === 'drift') envs = envs.filter(e => e.drift);
-    else if (envChip === 'verifying') envs = envs.filter(e => !e.verified);
-    if (envFilter) {
-      const q = envFilter.toLowerCase();
+    if (env.chip.get() === 'attention') envs = envs.filter(e => order(e) < 2);
+    else if (env.chip.get() === 'drift') envs = envs.filter(e => e.drift);
+    else if (env.chip.get() === 'verifying') envs = envs.filter(e => !e.verified);
+    if (env.filter.get()) {
+      const q = env.filter.get().toLowerCase();
       envs = envs.filter(e => (e.name + ' ' + e.pipeline + ' ' + e.version + ' ' + e.by).toLowerCase().includes(q));
     }
     const sorted = g => g.slice().sort((a, b) => order(a) - order(b) || b.deployedAt - a.deployedAt);
-    const chip = (k, lbl) => `<button class="chip-btn ${envChip === k ? 'on' : ''}" onclick="_envC('${k}')">${lbl}</button>`;
     const row = e => ({
       nav: `#/environments/${encodeURIComponent(e.name)}`,
       cells: [
@@ -49,12 +49,13 @@
       }
     } else sorted(envs).forEach(e => rows.push(row(e)));
     return `<div class="page"><h1>Environments <span class="mut small">${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span></h1>
-      <div class="ctoolbar">
-        <input data-filter aria-label="filter environments" placeholder="filter name, pipeline, version…  ( / )" value="${esc(envFilter)}" oninput="_envF(this.value)">
-        ${chip('all', 'all')}${chip('attention', `⚠ needs attention${attn ? ' · ' + attn : ''}`)}${chip('drift', '⚠ drift')}${chip('verifying', '● verifying')}
-        <span class="sp"></span>
-        <span class="mut small">${envs.length} of ${total}</span>
-      </div>
+      ${filterBar({
+      filterKey: 'environments.filter', chipKey: 'environments.chip',
+      label: 'filter environments',
+      placeholder: 'filter name, pipeline, version…  ( / )',
+      chips: [['all', 'all'], ['attention', `⚠ needs attention${attn ? ' · ' + attn : ''}`], ['drift', '⚠ drift'], ['verifying', '● verifying']],
+      count: `${envs.length} of ${total}`,
+    })}
       ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(PK.model.team())}'s pipelines.</div>`)}
       ${dataTable({
       cols: [
