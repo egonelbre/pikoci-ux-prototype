@@ -1,0 +1,93 @@
+// Environments: what version is live where, with drift and guided rollback.
+(function (PK) {
+  'use strict';
+  window.VIEWS = window.VIEWS || {};
+  const { esc, ago } = PK.fmt;
+  const D = () => window.DATA;
+
+  // ---------- Environments --------------------------------------------------
+  let envFilter = '', envChip = 'all';
+  window._envF = v => { envFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
+  window._envC = c => { envChip = c; PK.app.refresh(); };
+
+  VIEWS.environments = function (name) {
+    if (name) return VIEWS.envDetail(name);
+    let envs = D().environments.filter(e => !PK.model.team() || e.pipeline.split('/')[0] === PK.model.team());
+    const total = envs.length;
+    // attention first: drift, then verifying, then quiet greens (newest deploy first)
+    const order = e => e.drift ? 0 : !e.verified ? 1 : 2;
+    const attn = envs.filter(e => order(e) < 2).length;
+    if (envChip === 'attention') envs = envs.filter(e => order(e) < 2);
+    else if (envChip === 'drift') envs = envs.filter(e => e.drift);
+    else if (envChip === 'verifying') envs = envs.filter(e => !e.verified);
+    if (envFilter) {
+      const q = envFilter.toLowerCase();
+      envs = envs.filter(e => (e.name + ' ' + e.pipeline + ' ' + e.version + ' ' + e.by).toLowerCase().includes(q));
+    }
+    const sorted = g => g.slice().sort((a, b) => order(a) - order(b) || b.deployedAt - a.deployedAt);
+    const chip = (k, lbl) => `<button class="chip-btn ${envChip === k ? 'on' : ''}" onclick="_envC('${k}')">${lbl}</button>`;
+    // environment + live version size to their content (nowrap); the
+    // pipeline column soaks up the leftover width and truncates if needed
+    const row = e => `<tr onclick="location.hash='#/environments/${encodeURIComponent(e.name)}'">
+          <td class="nowrap">${e.drift ? '<span class="c-failed" title="live version was not deployed by CI">⚠</span>' : e.verified ? '<span class="c-succeeded">✓</span>' : '<span class="c-started pulse">●</span>'}</td>
+          <td class="nowrap"><a class="row-link" href="#/environments/${encodeURIComponent(e.name)}"><b>${esc(e.name)}</b></a>
+            ${e.drift ? ' <span class="badge held-badge">drift</span>' : ''}${e.verified ? '' : ' <span class="chip">verifying…</span>'}</td>
+          <td class="mut small"><div class="ctt"><span class="shrink">${esc(e.pipeline)} · ${esc(e.job)}</span></div></td>
+          <td class="nowrap"><code>${esc(e.version)}</code></td>
+          <td class="mut small nowrap">${ago(e.deployedAt)} · ${esc(e.byBuild)} (${esc(e.by)})</td>
+        </tr>`;
+    // same grouping as the Pipelines table: team subheads at all-teams scale
+    const grouped = !PK.model.team() && envs.length > 9;
+    const rows = grouped
+      ? D().teams.map(t => {
+        const g = sorted(envs.filter(e => e.pipeline.split('/')[0] === t.name));
+        return g.length ? `<tr class="tsub"><td colspan="5">${esc(t.name)} <span class="mut">· ${g.length}</span></td></tr>${g.map(row).join('')}` : '';
+      }).join('')
+      : sorted(envs).map(row).join('');
+    return `<div class="page"><h1>Environments <span class="mut small">${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span></h1>
+      <div class="ctoolbar">
+        <input data-filter aria-label="filter environments" placeholder="filter name, pipeline, version…  ( / )" value="${esc(envFilter)}" oninput="_envF(this.value)">
+        ${chip('all', 'all')}${chip('attention', `⚠ needs attention${attn ? ' · ' + attn : ''}`)}${chip('drift', '⚠ drift')}${chip('verifying', '● verifying')}
+        <span class="sp"></span>
+        <span class="mut small">${envs.length} of ${total}</span>
+      </div>
+      ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(PK.model.team())}'s pipelines.</div>`)}
+      <div class="tbl-scroll"><table class="tbl ctbl">
+        <thead><tr><th></th><th>environment</th><th>pipeline</th><th>live version</th><th>deployed</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  };
+
+  VIEWS.envDetail = function (name) {
+    const e = D().environments.find(x => x.name === name);
+    if (!e) return '<div class="page">Environment not found — <a href="#/environments">environments</a></div>';
+    const plName = e.pipeline.split('/')[1];
+    return `<div class="page narrow">
+      <div class="crumbs"><a href="#/environments">environments</a> / <b>${esc(e.name)}</b>
+        ${e.drift ? '<span class="c-failed">⚠ drift</span>' : e.verified ? '<span class="c-succeeded">verified ✓</span>' : '<span class="c-started pulse">● verifying…</span>'}
+        <span class="mut small">deploy target of <a href="#/p/${esc(plName)}/graph">${esc(e.pipeline)}</a> · job <code>${esc(e.job)}</code></span>
+        <span class="sp"></span>
+        <button class="btn" data-act="rollback" data-arg="${esc(e.name)}">↩ Rollback…</button></div>
+      ${e.drift ? `<div class="warnbox">⚠ <b>Drift</b> — the live version was not deployed by CI (an out-of-band change).
+        Rollback re-establishes a CI-deployed version; the audit log records who and why.</div>` : ''}
+      <section class="panel"><div class="panel-head"><b>Live now</b></div>
+        <div class="pad">
+          <div style="font-size:20px"><code>${esc(e.version)}</code></div>
+          <div class="mut small gap-s">deployed ${ago(e.deployedAt)} · build ${esc(e.byBuild)} · by ${esc(e.by)}
+            ${e.verified ? ' · post-deploy verification passed' : ' · post-deploy verification still running'}</div>
+          <div class="mut small">rollback is guided: trigger-with-version + pin, confirmed, audited</div>
+        </div></section>
+      <section class="panel"><div class="panel-head"><b>History</b><span class="mut small">newest first</span></div>
+        <div class="tbl-scroll"><table class="tbl ctbl">
+        ${e.history.map((h, i) => `<tr>
+          <td width="24">${h.ok ? '<span class="c-succeeded">✓</span>' : '<span class="c-failed">✕</span>'}</td>
+          <td class="nowrap"><code>${esc(h.version)}</code>${i === 0 ? ' <span class="chip">live</span>' : ''}</td>
+          <td class="mut small" style="width:100%">${esc(h.build)}</td>
+          <td class="mut small nowrap r">${ago(h.at)}</td>
+          <td class="r nowrap">${i > 0 ? `<button class="btn sm" data-act="rollback" data-arg="${esc(e.name)}">↩ Roll back to this</button>` : ''}</td>
+        </tr>`).join('')}
+        </table></div></section>
+    </div>`;
+  };
+})(window.PK);
