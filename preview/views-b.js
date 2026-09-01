@@ -1,8 +1,9 @@
 // Views B: Pipeline (graph with context selector / versions / config),
 // Build page v2, Ops, Audit, Teams, Settings.
-(function () {
+(function (PK) {
   'use strict';
-  const { esc, st, ago, fmtDur, bDur, reasonLabel } = P;
+  const { esc, ago, fmtDur, bDur } = PK.fmt;
+  const { st, reasonLabel } = PK.status;
   const D = () => window.DATA;
 
   // ---------- DAG layout ----------------------------------------------------
@@ -169,10 +170,10 @@
       }
       // job node: colored per the selected context; per-node ref annotation
       let cell, refUsed;
-      if (ctxRef) { cell = P.jobCell(pl, nm, ctxRef); refUsed = ctxRef; }
+      if (ctxRef) { cell = PK.model.jobCell(pl, nm, ctxRef); refUsed = ctxRef; }
       else { // primary-latest: per-job latest build (annotated), else decision on newest primary ref
-        const bs = P.jobBuilds(pl, nm);
-        if (bs.length) { cell = { kind: 'build', build: bs[0], status: P.bStatus(bs[0]) }; refUsed = Object.values(bs[0].intent.versions)[0]; }
+        const bs = PK.model.jobBuilds(pl, nm);
+        if (bs.length) { cell = { kind: 'build', build: bs[0], status: PK.status.bStatus(bs[0]) }; refUsed = Object.values(bs[0].intent.versions)[0]; }
         else { cell = { kind: 'none', status: 'none' }; refUsed = ''; }
       }
       if (refUsed) refs.add(refUsed);
@@ -195,10 +196,10 @@
 
   // ---------- Pipeline page -------------------------------------------------
   VIEWS.pipeline = function (name, view, ctx) {
-    const pl = P.getPipeline(name);
+    const pl = PK.model.getPipeline(name);
     if (!pl) return '<div class="page">Unknown pipeline</div>';
     view = view || 'graph';
-    const s = P.primaryStatus(pl);
+    const s = PK.model.primaryStatus(pl);
     const V = v => `<a class="tab ${view === v ? 'on' : ''}" href="#/p/${name}/${v}">${v[0].toUpperCase() + v.slice(1)}</a>`;
     // context chips: primary-latest + lineage heads + recent versions
     const res = pl.resources[0];
@@ -213,8 +214,8 @@
       const outs = [];
       for (const j of pl.jobs) {
         let bb = null;
-        if (ctx) { const c = P.jobCell(pl, j.name, ctx); bb = c.kind === 'build' ? c.build : null; }
-        else bb = P.jobBuilds(pl, j.name)[0] || null;
+        if (ctx) { const c = PK.model.jobCell(pl, j.name, ctx); bb = c.kind === 'build' ? c.build : null; }
+        else bb = PK.model.jobBuilds(pl, j.name)[0] || null;
         if (bb && bb.artifacts) for (const a of bb.artifacts) outs.push({ a, b: bb });
       }
       if (outs.length) body += `<h3>Outputs <span class="mut small">— produced by ${ctx ? `<code>${esc(ctx)}</code>` : 'the builds shown'}</span></h3>
@@ -234,7 +235,7 @@
           <td><code>${esc(v.id.ref)}</code></td>
           <td>${esc(v.meta.msg || '')} ${v.meta.author ? `<span class="mut small">· ${esc(v.meta.author)}</span>` : ''}</td>
           <td class="mut small nowrap">${ago(v.meta.at)}</td>
-          <td><span class="dots">${pl.jobs.filter(P.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
+          <td><span class="dots">${pl.jobs.filter(PK.model.isRunJob).map(j => VIEWS.jobDot(pl, j.name, v.id.ref)).join('')}</span></td>
         </tr>`;
       }).join('')}</table></div>
       ${res.pinned ? `<div class="warnbox gap">📌 pinned to <code>${esc(res.pinned.ref)}</code> by <b>${esc(res.pinned.actor)}</b> — "${esc(res.pinned.reason)}" (${ago(res.pinned.at)}). Newer versions are ignored; escape hatches carry actor + reason.</div>` : ''}`;
@@ -264,8 +265,8 @@
 
   // ---------- Pipelines: dense data table (weather + duration trend) --------
   let pipFilter = '', pipChip = 'all';
-  window._pipF = v => { pipFilter = v; P.App.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._pipC = c => { pipChip = c; P.App.refresh(); };
+  window._pipF = v => { pipFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
+  window._pipC = c => { pipChip = c; PK.app.refresh(); };
 
   // weather: last-10 outcomes as ticks + a summary glyph from the pass rate
   VIEWS.weather = function (hist) {
@@ -293,11 +294,11 @@
   };
 
   VIEWS.pipelines = function () {
-    let pls = P.pipelines();
+    let pls = PK.model.pipelines();
     const total = pls.length;
     const isPR = pl => pl.primaryContext.kind === 'lineages';
-    if (pipChip === 'failing') pls = pls.filter(pl => P.primaryStatus(pl) === 'failed' || (isPR(pl) && P.secondaryCounts(pl).failing));
-    else if (pipChip === 'running') pls = pls.filter(pl => ['started', 'pending'].includes(P.primaryStatus(pl)) || (isPR(pl) && P.secondaryCounts(pl).running));
+    if (pipChip === 'failing') pls = pls.filter(pl => PK.model.primaryStatus(pl) === 'failed' || (isPR(pl) && PK.model.secondaryCounts(pl).failing));
+    else if (pipChip === 'running') pls = pls.filter(pl => ['started', 'pending'].includes(PK.model.primaryStatus(pl)) || (isPR(pl) && PK.model.secondaryCounts(pl).running));
     else if (pipChip === 'paused') pls = pls.filter(pl => pl.paused);
     else if (pipChip === 'pr') pls = pls.filter(isPR);
     if (pipFilter) {
@@ -305,12 +306,12 @@
       pls = pls.filter(pl => (pl.team + '/' + pl.name + ' ' + pl.desc).toLowerCase().includes(q));
     }
     const order = s => s === 'failed' ? 0 : s === 'started' ? 1 : 2;
-    const sorted = g => g.slice().sort((a, b) => order(P.primaryStatus(a)) - order(P.primaryStatus(b)) || a.name.localeCompare(b.name));
+    const sorted = g => g.slice().sort((a, b) => order(PK.model.primaryStatus(a)) - order(PK.model.primaryStatus(b)) || a.name.localeCompare(b.name));
     const row = pl => {
-      const s = P.primaryStatus(pl);
+      const s = PK.model.primaryStatus(pl);
       const pr = isPR(pl);
-      const counts = pr ? P.secondaryCounts(pl) : null;
-      const hist = P.plHistory(pl);
+      const counts = pr ? PK.model.secondaryCounts(pl) : null;
+      const hist = PK.model.plHistory(pl);
       const lastB = D().builds.filter(b => b.pipeline === pl.name).sort((a, b) => b.start - a.start)[0];
       const lastLin = pr ? D().lineages.filter(l => (l.pl || 'pikoci-pr') === pl.name).sort((a, b) => b.updated - a.updated)[0] : null;
       const lastAt = lastB ? lastB.start : (lastLin ? lastLin.updated : (pl.resources[0].versions[0] || { meta: {} }).meta.at);
@@ -328,7 +329,7 @@
       </tr>`;
     };
     const head = `<thead><tr><th></th><th>pipeline</th><th>context</th><th>weather · last ${10}</th><th>duration trend</th><th class="r">activity</th><th></th></tr></thead>`;
-    const grouped = !P.team() && pls.length > 9;
+    const grouped = !PK.model.team() && pls.length > 9;
     const rows = grouped
       ? D().teams.map(t => {
         const g = sorted(pls.filter(p => p.team === t.name));
@@ -341,7 +342,7 @@
         <input data-filter aria-label="filter pipelines" placeholder="filter team, name, description…  ( / )" value="${esc(pipFilter)}" oninput="_pipF(this.value)">
         ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● started')}${chip('paused', '❚❚ paused')}${chip('pr', '⇅ PR checks')}
         <span class="sp"></span>
-        <span class="mut small">${pls.length} of ${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span>
+        <span class="mut small">${pls.length} of ${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span>
       </div>
       <div class="tbl-scroll"><table class="tbl ctbl ptbl fixed">
       <colgroup><col style="width:30px"><col><col style="width:124px"><col style="width:128px"><col style="width:148px"><col style="width:70px"><col style="width:74px"></colgroup>
@@ -355,19 +356,19 @@
   // hand; the log pane gets the rest of the viewport (logs can be 40MB —
   // finding a step must not mean scrolling through them blind).
   VIEWS.build = function (id) {
-    const b = P.getBuild(id);
+    const b = PK.model.getBuild(id);
     if (!b) return '<div class="page">Build not found</div>';
-    const pl = P.getPipeline(b.pipeline);
-    const s = P.bStatus(b);
+    const pl = PK.model.getPipeline(b.pipeline);
+    const s = PK.status.bStatus(b);
     const ref = Object.values(b.intent.versions)[0];
-    const vm = P.vmeta(pl, ref);
-    const failIdx = P.firstFailStep(b);
+    const vm = PK.model.vmeta(pl, ref);
+    const failIdx = PK.model.firstFailStep(b);
     // waiting builds included: the approval card's "diff since last deploy"
     // link needs a cmpbox to reveal (it used to point at nothing)
-    const cmp = ['failed', 'succeeded', 'warning', 'waiting_for_approval'].includes(b.status) ? P.compareWithLastGreen(b) : null;
+    const cmp = ['failed', 'succeeded', 'warning', 'waiting_for_approval'].includes(b.status) ? PK.model.compareWithLastGreen(b) : null;
     const cmpHidden = b.status === 'waiting_for_approval';
-    const history = P.jobBuilds(pl, b.job).slice(0, 8);
-    const stall = P.lastOutputAge(b);
+    const history = PK.model.jobBuilds(pl, b.job).slice(0, 8);
+    const stall = PK.fmt.lastOutputAge(b);
     const j = pl.jobs.find(x => x.name === b.job);
     const newerExists = b.status === 'waiting_for_approval' && pl.resources[0].versions[0] && pl.resources[0].versions[0].id.ref !== ref;
     // PR-triggered build → the change it belongs to (for the way back up)
@@ -384,7 +385,7 @@
 
     // --- sidebar: the run's stages (jobs at this ref, DAG order, matrix grouped)
     const depths = layers(pl).depth;
-    const runJobs = pl.jobs.filter(P.isRunJob).slice()
+    const runJobs = pl.jobs.filter(PK.model.isRunJob).slice()
       .sort((a, c) => (depths[a.name] - depths[c.name]) || a.name.localeCompare(c.name));
     let sideJobs = '', lastGrp = null;
     for (const jj of runJobs) {
@@ -394,7 +395,7 @@
         lastGrp = g;
       }
       const label = g ? jj.name.slice(g.length + 2) : jj.name;
-      const c = P.jobCell(pl, jj.name, ref);
+      const c = PK.model.jobCell(pl, jj.name, ref);
       if (c.kind === 'build') {
         const cs = c.status;
         sideJobs += `<a class="jrow ${c.build.id === b.id ? 'on' : ''}" href="#/b/${c.build.id}">
@@ -443,7 +444,7 @@
           <div class="b2-sec">steps — ${esc(b.job)}</div>
           ${sideSteps}
           <div class="b2-sec">history — ${esc(b.job)}</div>
-          <div class="b2-hist">${history.map(x => `<a class="c-${P.bStatus(x)}" href="#/b/${x.id}" title="${ago(x.start)}" ${x.id === b.id ? 'style="font-weight:700;text-decoration:underline"' : ''}>${st(P.bStatus(x)).sym}#${x.n}</a>`).join(' ')}</div>
+          <div class="b2-hist">${history.map(x => `<a class="c-${PK.status.bStatus(x)}" href="#/b/${x.id}" title="${ago(x.start)}" ${x.id === b.id ? 'style="font-weight:700;text-decoration:underline"' : ''}>${st(PK.status.bStatus(x)).sym}#${x.n}</a>`).join(' ')}</div>
           <details class="b2-det" data-det="prov:${b.id}"><summary>provenance</summary>
             intent: ${Object.entries(b.intent.versions).map(([r, v]) => `<code title="${esc(r)}">${esc(v)}</code>`).join(' ')}
             ${b.resolved ? `<br>resolved: ${Object.entries(b.resolved.versions).map(([r, v]) => `<code>${esc(v)}</code>`).join(' ')} on <b>${esc(b.resolved.worker)}</b>` : '<br><i>not yet resolved (pending builds show intent only)</i>'}
@@ -452,7 +453,7 @@
           <details class="b2-det" data-det="local:${b.id}"><summary>run locally</summary>
             same job, same config, your working tree:
             <pre class="cmdline">pikoci run -p pipeline.hcl -j ${esc(b.job)} --resource ${esc(Object.keys(b.intent.versions)[0])}=./</pre>
-            <button class="btn sm" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.previousElementSibling.textContent);P.toast('Copied')">copy</button>
+            <button class="btn sm" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.previousElementSibling.textContent);PK.toast('Copied')">copy</button>
           </details>
           <div class="b2-det mut"><span class="kbd">f</span> next failure · <span class="kbd">⌘K</span> actions</div>
         </aside>
@@ -529,7 +530,7 @@
       out += `<div class="warnbox">⚠ <b>Test report not ingested</b> — ${esc(b.testReportError)}</div>`;
     }
     if (b.tests) {
-      const stats = P.testStats(b);
+      const stats = PK.model.testStats(b);
       const failed = b.tests.filter(t => t.s === 'fail');
       const skipped = b.tests.filter(t => t.s === 'skip');
       const histDot = h => h.s === null
@@ -544,8 +545,8 @@
       out += `<h3>Checks <span class="mut small">— ${stats.pass} passed${stats.fail ? ` · <b class="c-failed">${stats.fail} failed</b>` : ''}${stats.skip ? ` · ${stats.skip} skipped` : ''} · ${fmtDur(stats.dur)} test time</span></h3>`;
       if (failed.length) out += `<div class="tbl-scroll"><table class="tbl ctbl wtbl">
         ${failed.map(t => {
-        const isNew = P.isNewFailure(pl, b.job, b, t.id);
-        const hist = P.testHistory(pl, b.job, b, t.id);
+        const isNew = PK.model.isNewFailure(pl, b.job, b, t.id);
+        const hist = PK.model.testHistory(pl, b.job, b, t.id);
         return `<tr>
           <td class="c-failed nowrap">✕</td>
           <td class="nowrap"><code>${esc(t.id)}</code>
@@ -563,7 +564,7 @@
       // single test by name across the whole suite.
       const q = (window._tq || '').toLowerCase();
       out += `<div class="ctoolbar gap-s"><input aria-label="find a test" placeholder="find a test by name…" value="${esc(window._tq || '')}"
-        oninput="window._tq=this.value;P.App.refresh();const f=[...document.querySelectorAll('input[aria-label=&quot;find a test&quot;]')][0];if(f){f.focus();f.setSelectionRange(999,999)}">
+        oninput="window._tq=this.value;PK.app.refresh();const f=[...document.querySelectorAll('input[aria-label=&quot;find a test&quot;]')][0];if(f){f.focus();f.setSelectionRange(999,999)}">
         <span class="sp"></span><span class="mut small">${b.tests.length} tests</span></div>`;
       if (q) {
         const hits = b.tests.filter(t => t.id.toLowerCase().includes(q));
@@ -596,7 +597,7 @@
       out += `<h3>Measurements <span class="mut small">— values, not verdicts; deltas are vs this job's last green run</span></h3>
       <div class="tbl-scroll"><table class="tbl ctbl wtbl">
       ${b.measurements.map(m => {
-        const d = P.measurementDelta(pl, b, m);
+        const d = PK.model.measurementDelta(pl, b, m);
         const worse = d && (m.better === 'lower' ? d.pct > 0 : d.pct < 0);
         const sig = d && Math.abs(d.pct) >= 2;
         return `<tr>
@@ -613,12 +614,12 @@
   // ---------- Ops / Audit / Teams / Settings --------------------------------
   // ---------- Queue: "when does my job start / how big is the workload" -----
   VIEWS.queue = function () {
-    const scoped = b => P.inTeam(P.getPipeline(b.pipeline));
+    const scoped = b => PK.model.inTeam(PK.model.getPipeline(b.pipeline));
     const pend = D().builds.filter(b => b.status === 'pending' && !b.heldReason && b.queue && scoped(b))
       .sort((a, b) => a.start - b.start);
     const running = D().builds.filter(b => b.status === 'started' && scoped(b)).sort((a, b) => a.start - b.start);
-    const workers = D().workers.filter(w => !P.team() || !w.team || w.team === P.team());
-    const pools = D().pools.filter(p => !P.team() || !p.team || p.team === P.team());
+    const workers = D().workers.filter(w => !PK.model.team() || !w.team || w.team === PK.model.team());
+    const pools = D().pools.filter(p => !PK.model.team() || !p.team || p.team === PK.model.team());
     const online = workers.filter(w => w.status === 'online');
     const booting = workers.filter(w => w.status === 'provisioning');
     // --concurrency N registers N single-build workers (name-1…name-N);
@@ -628,7 +629,7 @@
     const poolFor = t => pools.find(p => p.tags.includes(t));
     // per-tag capacity for tags in demand
     const tags = [...new Set(pend.map(b => b.queue.tag))];
-    return `<div class="page"><h1>Queue${P.team() ? ` <span class="mut small">· team ${esc(P.team())}</span>` : ''}</h1>
+    return `<div class="page"><h1>Queue${PK.model.team() ? ` <span class="mut small">· team ${esc(PK.model.team())}</span>` : ''}</h1>
       <div class="meta" data-live><b>${running.length}</b> running · <b>${pend.length}</b> queued ·
         capacity <b>${busy}/${regd}</b> registered workers busy <span class="mut small">(--concurrency N registers N single-build workers)</span> on ${online.length} healthy host${online.length === 1 ? '' : 's'}${booting.length ? ` <b class="c-pending">+ ${booting.length} provisioning</b> (${booting.reduce((s, w) => s + (w.concurrency || 1), 0)} more on the way)` : ''}</div>
       ${pend.length ? `<h2>Waiting</h2>
@@ -677,8 +678,8 @@
     // Global workers are visible to every team, but dispatch PREFERS team
     // workers: a global worker skips a team's builds while that team has a
     // healthy team worker of its own (Workers.md)
-    const workers = D().workers.filter(w => !P.team() || !w.team || w.team === P.team());
-    const pools = D().pools.filter(p => !P.team() || !p.team || p.team === P.team());
+    const workers = D().workers.filter(w => !PK.model.team() || !w.team || w.team === PK.model.team());
+    const pools = D().pools.filter(p => !PK.model.team() || !p.team || p.team === PK.model.team());
     const gauge = (frac, warnAt) => {
       if (frac == null) return '<span class="mut small" title="no fresh heartbeat — last known value withheld rather than shown as current">—</span>';
       const pct = Math.round(frac * 100);
@@ -692,7 +693,7 @@
         <td class="nowrap"><a class="row-link" href="#/workers/${encodeURIComponent(w.name)}"><b>${esc(w.name)}</b></a>${(w.concurrency || 1) > 1 ? ` <span class="mut small" title="--concurrency ${w.concurrency} registers ${esc(w.name)}-1…${esc(w.name)}-${w.concurrency} — each registered worker runs one build">×${w.concurrency}</span>` : ''}</td>
         <td class="nowrap">${w.status === 'provisioning'
         ? `<span class="c-pending pulse">◌</span> provisioning <span class="mut small">(${Math.round(w.up / 1000)}s)</span>`
-        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${P.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
+        : `<span class="c-${w.status === 'online' ? 'succeeded' : 'failed'}">●</span> ${w.status === 'online' ? 'healthy' : w.status}${w.lastSeen ? ` <span class="mut small">(${ago(w.lastSeen)})</span>` : ''}${w.ephemeral && w.up ? ` <span class="mut small">· up ${PK.fmt.fmtDur(w.up / 1000)}</span>` : ''}`}</td>
         <td class="nowrap">${w.team || '<span class="mut" title="global workers skip a team&#39;s builds while that team has a healthy team worker">Global</span>'}</td>
         <td style="width:100%">${w.tags.map(t => `<code>${t}</code>`).join(' ')}</td>
         <td class="nowrap">${w.status === 'provisioning' ? '<span class="mut small">—</span>' : cpu(w)}</td>
@@ -711,7 +712,7 @@
         · idle TTL ${esc(p.idleTtl)} · today: ${p.buildsToday} builds on ${p.terminatedToday + online} instances</span></td></tr>
       ${inst.map(row).join('')}`;
     }).join('');
-    return `<div class="page"><h1>Workers${P.team() ? ` <span class="mut small">· team ${esc(P.team())} + Global</span>` : ''}</h1>
+    return `<div class="page"><h1>Workers${PK.model.team() ? ` <span class="mut small">· team ${esc(PK.model.team())} + Global</span>` : ''}</h1>
       <div class="tbl-scroll"><table class="tbl ctbl wtbl"><thead><tr><th>worker</th><th>state</th><th>team</th><th style="width:100%">tags</th><th>cpu</th><th>disk</th><th>version</th><th class="r">running</th><th class="r"></th></tr></thead>
       <tbody>
       ${statics.length ? `<tr class="tsub"><td colspan="9">static <span class="mut">· ${statics.length} registered</span></td></tr>${statics.map(row).join('')}` : ''}
@@ -727,7 +728,7 @@
 
   // ---------- Worker detail: cpu/disk overlaid, runs as bands ---------------
   let wkRange = 168; // hours shown: 168 / 24 / 6
-  window._wkR = h => { wkRange = h; P.App.refresh(); };
+  window._wkR = h => { wkRange = h; PK.app.refresh(); };
   window._wkHi = (i, on) => { // hover a run row → light its band on the chart
     const el = document.querySelector(`[data-run="${i}"]`);
     if (el) { el.style.opacity = on ? 0.6 : ''; el.style.stroke = on ? 'var(--fg)' : ''; el.style.strokeWidth = on ? 1.5 : ''; }
@@ -841,9 +842,9 @@
 
   VIEWS.audit = function () {
     // audit is team-scoped in the backend too (per-team audit log endpoint)
-    const rows = D().audit.filter(a => !P.team() || a.target.startsWith(P.team() + '/'));
-    return `<div class="page"><h1>Audit${P.team() ? ` <span class="mut small">· team ${esc(P.team())}</span>` : ''}</h1>
-      ${rows.length ? '' : `<div class="mut pad">No recorded actions for team ${esc(P.team())} in the demo window.</div>`}
+    const rows = D().audit.filter(a => !PK.model.team() || a.target.startsWith(PK.model.team() + '/'));
+    return `<div class="page"><h1>Audit${PK.model.team() ? ` <span class="mut small">· team ${esc(PK.model.team())}</span>` : ''}</h1>
+      ${rows.length ? '' : `<div class="mut pad">No recorded actions for team ${esc(PK.model.team())} in the demo window.</div>`}
       <div class="tbl-scroll"><table class="tbl"><thead><tr><th>when</th><th>who</th><th>action</th><th>target</th><th>detail</th></tr></thead>
       ${rows.map(a => `<tr><td class="mut small nowrap">${ago(a.at)}</td><td class="nowrap"><b>${esc(a.user)}</b></td>
         <td class="nowrap"><code>${esc(a.action)}</code></td><td class="nowrap">${esc(a.target)}</td><td class="mut small">${esc(a.detail)}</td></tr>`).join('')}</table></div>
@@ -875,4 +876,4 @@
       <section class="panel"><div class="panel-head"><b>Audit</b></div><div class="pad"><a href="#/audit">Open audit log →</a></div></section>
     </div>`;
   };
-})();
+})(window.PK);

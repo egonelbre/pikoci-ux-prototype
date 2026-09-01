@@ -43,14 +43,30 @@
 <script src="data/generate/branches.js"></script>
 <script src="data/scenarios/audit.js"></script>
 <script src="data/index.js"></script>
-<script src="core.js"></script>
+<!-- lib tier: no domain knowledge -->
+<script src="lib/fmt.js"></script>
+<script src="lib/toast.js"></script>
+<script src="lib/app.js"></script>
+<!-- model tier: read-only queries over window.DATA -->
+<script src="model/status.js"></script>
+<script src="model/pipelines.js"></script>
+<script src="model/lineages.js"></script>
+<script src="model/branches.js"></script>
+<script src="model/checks.js"></script>
+<script src="model/builds.js"></script>
+<script src="model/attention.js"></script>
+<script src="model/capability.js"></script>
+<!-- behaviour: needs both tiers above -->
+<script src="lib/actions.js"></script>
+<script src="lib/keys.js"></script>
+<script src="lib/live.js"></script>
 <script src="views-a.js"></script>
 <script src="views-b.js"></script>
 <script src="routes.js"></script>
 <script>
 (function () {
   'use strict';
-  P.App.start(function render(route) {
+  PK.app.start(function render(route) {
     document.getElementById('hdr').innerHTML = ROUTES.shell(route);
     document.getElementById('main').innerHTML = ROUTES.main(route);
   });

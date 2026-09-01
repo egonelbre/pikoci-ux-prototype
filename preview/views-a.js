@@ -1,22 +1,23 @@
 // Views A: shell, Home (attention strip + wall), Changes, Environments,
 // and the teaching empty states for gated-off sections.
-(function () {
+(function (PK) {
   'use strict';
-  const { esc, st, ago, fmtDur, bDur, reasonLabel } = P;
+  const { esc, ago, fmtDur, bDur } = PK.fmt;
+  const { st, reasonLabel } = PK.status;
   const D = () => window.DATA;
 
   // ---------- shell ---------------------------------------------------------
   window.VIEWS = window.VIEWS || {};
   VIEWS.shell = function (route) {
     const sec = route[0] || 'home';
-    const items = P.navItems();
-    const attn = P.attention();
+    const items = PK.nav.navItems();
+    const attn = PK.attention();
     const active = id => (sec === id || (id === 'home' && !route[0]) || (id === 'pipelines' && ['p', 'b'].includes(sec))) ? 'on' : '';
-    const tsel = P.team();
+    const tsel = PK.model.team();
     return `<header>
       <a class="logo" href="#/"><img src="../logo/pikoci-logo.svg" alt="" style="height:1.15em;vertical-align:-0.2em"> PikoCI <span class="preview-tag">preview</span></a>
       <select class="team-sel" aria-label="team scope" title="team scope — filters every page (maps to the backend's team scoping)"
-        onchange="P.setTeam(this.value)">
+        onchange="PK.app.setTeam(this.value)">
         <option value="">all teams</option>
         ${D().teams.map(t => `<option value="${esc(t.name)}" ${tsel === t.name ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
       </select>
@@ -35,7 +36,7 @@
   VIEWS.reasonChip = function (d, ctx) {
     const id = 'r-' + Math.random().toString(36).slice(2, 8);
     const key = 'rsn:' + [d.pipeline, d.job, d.ref, d.code, ctx || ''].join('|');
-    const fam = P.REASON[d.code] ? P.REASON[d.code].family : 'waiting';
+    const fam = PK.status.REASON[d.code] ? PK.status.REASON[d.code].family : 'waiting';
     return `<span class="reason-wrap"><button class="reason ${fam}" aria-expanded="false" aria-controls="${id}"
       aria-label="${esc(reasonLabel(d))}"
       onclick="event.stopPropagation();const p=document.getElementById('${id}');const open=p.hidden;p.hidden=!open;this.setAttribute('aria-expanded',open)"
@@ -45,7 +46,7 @@
 
   // per-job dot for a (pipeline, job, ref) cell
   VIEWS.jobDot = function (pl, job, ref) {
-    const c = P.jobCell(pl, job, ref);
+    const c = PK.model.jobCell(pl, job, ref);
     if (c.kind === 'build') {
       const s = c.status;
       return `<a class="dot ${s === 'started' ? 'pulse' : ''}" href="#/b/${c.build.id}"
@@ -57,7 +58,7 @@
 
   // ---------- Home ----------------------------------------------------------
   VIEWS.home = function () {
-    const { items, notShown } = P.attention();
+    const { items, notShown } = PK.attention();
     const strip = items.length ? `<section class="strip" aria-label="needs attention">
       ${items.map(t => `<div class="strip-row ${t.cls}">
         <span class="strip-icon" aria-hidden="true">${t.icon}</span>
@@ -75,9 +76,9 @@
     </section>` : `<div class="allclear">✓ Nothing needs you — all green.</div>`;
 
     const card = pl => {
-      const s = P.primaryStatus(pl);
+      const s = PK.model.primaryStatus(pl);
       const isPR = pl.primaryContext.kind === 'lineages';
-      const counts = isPR ? P.secondaryCounts(pl) : null;
+      const counts = isPR ? PK.model.secondaryCounts(pl) : null;
       const lastB = D().builds.filter(b => b.pipeline === pl.name).sort((a, b) => b.start - a.start)[0];
       return `<a class="card" href="#/p/${pl.name}/graph" style="--card:${isPR ? 'var(--mut3)' : st(s).color}">
         <div class="card-head"><b>${esc(pl.name)}</b><span class="mut small">${esc(pl.team)}</span>
@@ -92,9 +93,9 @@
         </div>
       </a>`;
     };
-    const pls = P.pipelines();
+    const pls = PK.model.pipelines();
     // all-teams at company scale: group the wall by team (dropdown scopes it)
-    const cards = (!P.team() && pls.length > 9)
+    const cards = (!PK.model.team() && pls.length > 9)
       ? D().teams.map(t => {
         const g = pls.filter(p => p.team === t.name);
         return g.length ? `<h2 class="team-head">${esc(t.name)} <span class="mut small">${g.length} pipeline${g.length > 1 ? 's' : ''}</span></h2><div class="cards">${g.map(card).join('')}</div>` : '';
@@ -110,12 +111,12 @@
 
   // ---------- Changes: dense table (built for 100s of open PRs) -------------
   let chgFilter = '', chgChip = 'all', chgBots = true;
-  window._chgF = v => { chgFilter = v; P.App.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._chgC = c => { chgChip = c; P.App.refresh(); };
-  window._chgB = () => { chgBots = !chgBots; P.App.refresh(); };
+  window._chgF = v => { chgFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
+  window._chgC = c => { chgChip = c; PK.app.refresh(); };
+  window._chgB = () => { chgBots = !chgBots; PK.app.refresh(); };
   let brFilter = '', brChip = 'active';
-  window._brF = v => { brFilter = v; P.App.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._brC = c => { brChip = c; P.App.refresh(); };
+  window._brF = v => { brFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
+  window._brC = c => { brChip = c; PK.app.refresh(); };
 
   VIEWS.dotStatic = function (status, job) {
     if (status === 'none') return `<span class="dot sm none" title="${esc(job)}">·</span>`;
@@ -131,19 +132,19 @@
     if (tab === 'mine' || tab === 'open') {
       // aggregates every PR pipeline in scope — 50 repos with their own
       // lint/verify pipelines land in ONE inbox, scoped by the team dropdown
-      let ls = P.lineages().filter(l => tab === 'open' || P.mine(l));
+      let ls = PK.model.lineages().filter(l => tab === 'open' || PK.model.mine(l));
       const total = ls.length;
       if (!chgBots) ls = ls.filter(l => !l.bot);
-      const held = l => !l.summary && D().builds.some(b => b.heldReason && Object.values(b.intent.versions)[0] === P.lineageHead(l).id.ref);
-      if (chgChip === 'failing') ls = ls.filter(l => P.lineageStatus(l) === 'failed');
-      else if (chgChip === 'running') ls = ls.filter(l => ['started', 'pending'].includes(P.lineageStatus(l)));
+      const held = l => !l.summary && D().builds.some(b => b.heldReason && Object.values(b.intent.versions)[0] === PK.model.lineageHead(l).id.ref);
+      if (chgChip === 'failing') ls = ls.filter(l => PK.model.lineageStatus(l) === 'failed');
+      else if (chgChip === 'running') ls = ls.filter(l => ['started', 'pending'].includes(PK.model.lineageStatus(l)));
       else if (chgChip === 'held') ls = ls.filter(held);
       else if (chgChip === 'drafts') ls = ls.filter(l => l.draft);
       if (chgFilter) {
         const q = chgFilter.toLowerCase();
         ls = ls.filter(l => (l.n + ' ' + l.title + ' ' + l.author + ' ' + l.branch + ' ' + (l.pl || 'pikoci-pr')).toLowerCase().includes(q));
       }
-      ls.sort((a, b) => (P.mine(b) ? 1 : 0) - (P.mine(a) ? 1 : 0) || b.updated - a.updated);
+      ls.sort((a, b) => (PK.model.mine(b) ? 1 : 0) - (PK.model.mine(a) ? 1 : 0) || b.updated - a.updated);
       const shown = ls.slice(0, 200);
       const chip = (k, lbl) => `<button class="chip-btn ${chgChip === k ? 'on' : ''}" onclick="_chgC('${k}')">${lbl}</button>`;
       body = `
@@ -152,20 +153,20 @@
         ${chip('all', 'all')}${chip('failing', '✕ failing')}${chip('running', '● started')}${chip('held', '⛔ held')}${chip('drafts', 'drafts')}
         <label class="small mut"><input type="checkbox" ${chgBots ? 'checked' : ''} onchange="_chgB()"> bots</label>
         <span class="sp"></span>
-        <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${P.team() ? ' in ' + esc(P.team()) : ''}</span>
+        <span class="mut small">${shown.length}${ls.length > 200 ? ' of ' + ls.length : ''} shown · ${total} open${PK.model.team() ? ' in ' + esc(PK.model.team()) : ''}</span>
       </div>
       <div class="tbl-scroll"><table class="tbl ctbl fixed">
         <colgroup><col style="width:30px"><col><col style="width:92px"><col style="width:114px"><col style="width:188px"><col style="width:132px"><col style="width:84px"></colgroup>
         <thead><tr><th></th><th>PR</th><th>repo</th><th>author</th><th>branch @ head</th><th class="r">checks</th><th class="r">updated</th></tr></thead>
         <tbody>
         ${shown.map(l => {
-        const lpl = P.lineagePl(l);
+        const lpl = PK.model.lineagePl(l);
         const jobNames = lpl.jobs.map(j => j.name);
-        const head = P.lineageHead(l);
-        const s = P.lineageStatus(l);
+        const head = PK.model.lineageHead(l);
+        const s = PK.model.lineageStatus(l);
         const isHeld = held(l);
         const old = l.changes.filter(c => c.superseded).length;
-        return `<tr class="${P.mine(l) ? 'mine-row' : ''}" onclick="location.hash='#/changes/pr/${l.n}'">
+        return `<tr class="${PK.model.mine(l) ? 'mine-row' : ''}" onclick="location.hash='#/changes/pr/${l.n}'">
           <td class="c-${isHeld ? 'held' : s} ${s === 'started' ? 'pulse' : ''}">${isHeld ? '⛔' : st(s).sym}</td>
           <td class="ct-title" title="${esc(l.title)}"><div class="ctt">
             <a class="row-link" href="#/changes/pr/${l.n}"><b>#${l.n}</b> ${esc(l.title)}</a>
@@ -174,7 +175,7 @@
             ${old ? `<span class="chip" title="superseded commits — builds auto-cancelled within this lineage">+${old} superseded</span>` : ''}
             ${l.forge ? `<a class="mut small" href="${esc(l.forge.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="open on ${esc(l.forge.kind)}">↗</a>` : ''}</div></td>
           <td class="mut small nowrap" title="${esc(lpl.team)}/${esc(lpl.name)}">${esc(lpl.name.replace(/-pr$/, ''))}</td>
-          <td class="mut nowrap">${P.mine(l) ? `<span class="you-mark" title="your PR" aria-label="your PR">★</span> ` : ''}${esc(l.author)}</td>
+          <td class="mut nowrap">${PK.model.mine(l) ? `<span class="you-mark" title="your PR" aria-label="your PR">★</span> ` : ''}${esc(l.author)}</td>
           <td class="nowrap"><code class="trunc-code" title="${esc(l.branch)}">${esc(l.branch)}</code> <code>${esc(head.id.ref)}</code></td>
           <td class="r nowrap"><span class="dots" onclick="event.stopPropagation()">
             ${l.summary ? l.summary.map((sst, i) => VIEWS.dotStatic(sst, jobNames[i] || 'check')).join('')
@@ -193,11 +194,11 @@
       // the summary line, branches inside on expand. Quiet branches (no
       // commit in 30d) stay hidden until "all" or search. Feature branches
       // never appear at all — they enter as PRs (Open PRs).
-      const rows = P.branchIndex();
+      const rows = PK.model.branchIndex();
       const q = (brFilter || '').toLowerCase();
       const terms = q.split(/\s+/).filter(Boolean);
       const quiet = r => Date.now() - r.lastAt > 30 * 86400e3;
-      const rank = r => r.status === 'paused' ? 6.5 : (P.RANK[r.status] !== undefined ? P.RANK[r.status] : 9);
+      const rank = r => r.status === 'paused' ? 6.5 : (PK.status.RANK[r.status] !== undefined ? PK.status.RANK[r.status] : 9);
       // "attention" = red AND alive — a branch red for a year is archaeology,
       // reachable via "all" and search, not something to shout about
       const attn = r => ['failed', 'waiting_for_approval', 'held'].includes(r.status) && !quiet(r);
@@ -232,7 +233,7 @@
           <td class="mut small"><div class="ctt"><span class="shrink">${esc(r.headMsg || (head ? head.msg : ''))}</span></div></td>
           <td class="mut small nowrap">${esc(r.headAuthor || (head ? head.author : ''))}</td>
           <td class="r nowrap"><span class="dots">${r.pl
-            ? r.pl.jobs.filter(P.isRunJob).slice(0, 5).map(j => VIEWS.jobDot(r.pl, j.name, r.headRef)).join('')
+            ? r.pl.jobs.filter(PK.model.isRunJob).slice(0, 5).map(j => VIEWS.jobDot(r.pl, j.name, r.headRef)).join('')
             : head.summary.map((s2, i2) => VIEWS.dotStatic(s2, r.jobs[i2] || 'check')).join('')}</span></td>
           <td class="mut small r nowrap">${ago(r.lastAt)}</td></tr>`;
       };
@@ -255,8 +256,8 @@
           : '<div class="mut pad">Nothing matches. Clear the filter or switch chips.</div>'}
         <p class="mut small">Every watched branch is its own pipeline (a git resource tracks one ref). Feature branches don't live here — they arrive as PRs.</p>`;
     } else if (tab === 'scheduled') {
-      const pl = P.getPipeline('hello-world');
-      if (!P.inTeam(pl)) return `<div class="page">
+      const pl = PK.model.getPipeline('hello-world');
+      if (!PK.model.inTeam(pl)) return `<div class="page">
         <div class="tabs">${T('mine', 'Mine')}${T('open', 'Open PRs')}${T('repos', 'Repos')}${T('scheduled', 'Scheduled')}</div>
         <div class="mut pad">Scheduled ticks in the demo dataset live in <b>oss/hello-world</b>. Pick “all teams” or “oss” in the top bar.</div></div>`;
       body = `<div class="tbl-scroll"><table class="tbl ctbl"><tbody>
@@ -278,7 +279,7 @@
     const tabs = `<div class="tabs">
       <a class="tab" href="#/changes/mine">Mine</a><a class="tab" href="#/changes/open">Open PRs</a>
       <a class="tab on" href="#/changes/repos">Repos</a><a class="tab" href="#/changes/scheduled">Scheduled</a></div>`;
-    const r = P.branchIndex().find(x => x.name === name);
+    const r = PK.model.branchIndex().find(x => x.name === name);
     if (!r) return `<div class="page">${tabs}<div class="mut pad">Branch not found — <a href="#/changes/repos">back to repos</a>.</div></div>`;
     let feed;
     if (r.pl) {
@@ -286,14 +287,14 @@
       feed = (res ? res.versions : []).map(v => {
         let worst = 'none';
         for (const j of r.pl.jobs) {
-          const c = P.jobCell(r.pl, j.name, v.id.ref);
-          if (c.kind === 'build' && P.RANK[c.status] < P.RANK[worst]) worst = c.status;
+          const c = PK.model.jobCell(r.pl, j.name, v.id.ref);
+          if (c.kind === 'build' && PK.status.RANK[c.status] < PK.status.RANK[worst]) worst = c.status;
         }
         return `<tr>
           <td class="c-${worst} ${worst === 'started' ? 'pulse' : ''}">${st(worst).sym}</td>
           <td class="ct-title" title="${esc(v.meta.msg || '')}"><div class="ctt"><code>${esc(v.id.ref)}</code><span class="shrink">${esc(v.meta.msg || '')}</span></div></td>
           <td class="mut nowrap">${esc(v.meta.author || '')}</td>
-          <td class="r nowrap"><span class="dots">${r.pl.jobs.filter(P.isRunJob).map(j => VIEWS.jobDot(r.pl, j.name, v.id.ref)).join('')}</span></td>
+          <td class="r nowrap"><span class="dots">${r.pl.jobs.filter(PK.model.isRunJob).map(j => VIEWS.jobDot(r.pl, j.name, v.id.ref)).join('')}</span></td>
           <td class="mut small r nowrap">${ago(v.meta.at)}</td></tr>`;
       }).join('');
     } else {
@@ -318,8 +319,8 @@
   // + dependencies in one artifact); the graph is a fold-out for deep DAGs.
   function prVerdict(l, pl, head, held) {
     const ref = head.id.ref;
-    const jobs = pl.jobs.filter(P.isRunJob);
-    const cells = jobs.map(j => ({ j, c: P.jobCell(pl, j.name, ref) }));
+    const jobs = pl.jobs.filter(PK.model.isRunJob);
+    const cells = jobs.map(j => ({ j, c: PK.model.jobCell(pl, j.name, ref) }));
     if (held) return `<div class="verdict held">
       <div class="v-head">⛔ <b>Held — fork PR.</b> CI won't run with secrets until a maintainer releases it (pr_hold = "forks"); the forge shows "pending — awaiting maintainer".
         <span class="sp"></span><button class="btn primary sm" data-act="release" data-arg="${held.id}">▶ Release (run CI, no secrets)</button></div>
@@ -329,7 +330,7 @@
       const b = fb.c.build;
       const errLines = [];
       for (const sp of b.steps) for (const ln of sp.log) if (/FAIL|ERROR|Error /.test(ln)) errLines.push(ln);
-      const cmp = P.compareWithLastGreen(b);
+      const cmp = PK.model.compareWithLastGreen(b);
       const blocked = cells.filter(x => x.c.kind === 'decision' && x.c.decision.code === 'upstream').map(x => x.j.name);
       return `<div class="verdict fail">
         <div class="v-head">✕ <b>${esc(b.job)} failed</b> on <code>${esc(ref)}</code>
@@ -337,7 +338,7 @@
           <a class="btn sm" href="#/b/${b.id}">Full log</a>
           <button class="btn sm primary" data-act="retry" data-arg="${b.id}">↻ Retry</button></div>
         ${errLines.length ? `<pre class="log excerpt">${errLines.slice(0, 3).map(x => `<span class="l-err">${esc(x)}</span>`).join('\n')}</pre>` : ''}
-        ${b.tests ? (() => { const ts = P.testStats(b); const nw = b.tests.filter(t => t.s === 'fail' && P.isNewFailure(pl, b.job, b, t.id)).length; return `<div class="small">checks: ${ts.pass} passed · <b class="c-failed">${ts.fail} failed</b>${nw ? ` <b class="c-failed">(${nw} new)</b>` : ' (all known)'} — <a href="#/b/${b.id}">details</a></div>`; })() : ''}
+        ${b.tests ? (() => { const ts = PK.model.testStats(b); const nw = b.tests.filter(t => t.s === 'fail' && PK.model.isNewFailure(pl, b.job, b, t.id)).length; return `<div class="small">checks: ${ts.pass} passed · <b class="c-failed">${ts.fail} failed</b>${nw ? ` <b class="c-failed">(${nw} new)</b>` : ' (all known)'} — <a href="#/b/${b.id}">details</a></div>`; })() : ''}
         <div class="mut small">${blocked.length ? `<b>${blocked.join(', ')}</b> won't start until it passes · ` : ''}${cmp ? (cmp.diffs.length
           ? `since last green (#${cmp.green.n}, ${ago(cmp.green.start)}): ${cmp.diffs.map(d => `<code>${esc(d.from)}</code>→<code>${esc(d.to)}</code>${d.toMeta.msg ? ` — "${esc(d.toMeta.msg)}"` : ''}`).join(' · ')}`
           : 'same input versions as last green — suspect environment or flake, not this change') : 'no earlier green run of this job to compare against'}</div>
@@ -353,7 +354,7 @@
     if (withB.length && withB.every(x => x.c.status === 'succeeded') && withB.length === cells.length)
       return `<div class="verdict ok">✓ <b>All ${cells.length} checks passed</b> on <code>${esc(ref)}</code>.</div>`;
     if (!withB.length) {
-      if (l.summary) return `<div class="verdict none">Checks for this change ran on its forge — this demo lineage carries only a summary. Status: <span class="c-${P.lineageStatus(l)}">${st(P.lineageStatus(l)).label}</span>.</div>`;
+      if (l.summary) return `<div class="verdict none">Checks for this change ran on its forge — this demo lineage carries only a summary. Status: <span class="c-${PK.model.lineageStatus(l)}">${st(PK.model.lineageStatus(l)).label}</span>.</div>`;
       return `<div class="verdict run">· Checks haven't started for <code>${esc(ref)}</code> yet.</div>`;
     }
     return `<div class="verdict run">
@@ -364,10 +365,10 @@
   VIEWS.prDetail = function (n) {
     const l = D().lineages.find(x => x.n === n);
     if (!l) return '<div class="page">PR not found</div>';
-    const pl = P.lineagePl(l);
-    const head = P.lineageHead(l);
+    const pl = PK.model.lineagePl(l);
+    const head = PK.model.lineageHead(l);
     const held = D().builds.find(b => b.heldReason && Object.values(b.intent.versions)[0] === head.id.ref);
-    const s = P.lineageStatus(l);
+    const s = PK.model.lineageStatus(l);
     const arts = D().builds.filter(b => b.pipeline === pl.name && Object.values(b.intent.versions)[0] === head.id.ref && b.artifacts);
     return `<div class="page b2-page">
       <div class="crumbs"><a href="#/changes">changes</a> / <b>#${l.n} ${esc(l.title)}</b>
@@ -380,7 +381,7 @@
         — every row below is scoped to this one commit</div>
       ${prVerdict(l, pl, head, held)}
       ${l.summary && !D().builds.some(b => b.pipeline === pl.name && Object.values(b.intent.versions)[0] === head.id.ref)
-        ? `<div class="tbl-scroll"><table class="tbl ctbl">${pl.jobs.filter(P.isRunJob).map((j, i) => `<tr>
+        ? `<div class="tbl-scroll"><table class="tbl ctbl">${pl.jobs.filter(PK.model.isRunJob).map((j, i) => `<tr>
             <td width="26">${VIEWS.dotStatic(l.summary[i] || 'none', j.name)}</td>
             <td><b>${esc(j.name)}</b></td>
             <td class="mut small r">${st(l.summary[i] || 'none').label}</td>
@@ -412,7 +413,7 @@
       for (const inp of j.inputs || []) for (const p of inp.passed || []) d = Math.max(d, jd(p) + 1);
       return (depth[name] = d);
     };
-    const jobs = pl.jobs.filter(P.isRunJob);
+    const jobs = pl.jobs.filter(PK.model.isRunJob);
     jobs.forEach(j => jd(j.name));
     const nodeW = 122, nodeH = 36, gapX = 56, gapY = 12, pad = 10;
     const maxD = Math.max(0, ...jobs.map(j => depth[j.name]));
@@ -441,7 +442,7 @@
     let nodes = '';
     for (const j of jobs) {
       const p = pos[j.name];
-      const c = P.jobCell(pl, j.name, ref);
+      const c = PK.model.jobCell(pl, j.name, ref);
       let timing, fill, click = '';
       if (c.kind === 'build') {
         const s = c.status;
@@ -449,7 +450,7 @@
         fill = st(s).color;
         click = `onclick="location.hash='#/b/${c.build.id}'"`;
       } else if (c.kind === 'decision') {
-        timing = P.REASON[c.decision.code] && P.REASON[c.decision.code].family === 'wont_run' ? "won't run" : 'waiting';
+        timing = PK.status.REASON[c.decision.code] && PK.status.REASON[c.decision.code].family === 'wont_run' ? "won't run" : 'waiting';
         fill = 'var(--mut3)';
       } else { timing = '—'; fill = 'var(--mut3)'; }
       const pulse = c.kind === 'build' && c.build.status === 'started' ? 'pulse' : '';
@@ -476,10 +477,10 @@
       for (const inp of j.inputs || []) for (const p of inp.passed || []) d = Math.max(d, jd(p) + 1);
       return (depth[name] = d);
     };
-    const jobs = pl.jobs.filter(P.isRunJob);
+    const jobs = pl.jobs.filter(PK.model.isRunJob);
     jobs.forEach(j => jd(j.name));
     jobs.sort((a, b) => depth[a.name] - depth[b.name] || a.name.localeCompare(b.name));
-    const cells = jobs.map(j => ({ j, c: P.jobCell(pl, j.name, ref) }));
+    const cells = jobs.map(j => ({ j, c: PK.model.jobCell(pl, j.name, ref) }));
     const timed = cells.filter(x => x.c.kind === 'build' && x.c.build.start && (x.c.build.end || x.c.build.status === 'started'));
     if (!cells.some(x => x.c.kind !== 'none')) return '<div class="mut pad">No runs recorded for this commit in the demo dataset.</div>';
     const t0 = timed.length ? Math.min(...timed.map(x => x.c.build.start)) : 0;
@@ -535,7 +536,7 @@
       return `<div class="wf-row">
         <div class="wf-lbl"><span class="mut">·</span>${name}</div>
         <div class="wf-lane">${gridLines}<span class="wf-ghost" style="left:${ghostX.length ? Math.min(Math.max(...ghostX), 78).toFixed(1) : 2}%">
-          ${c.kind === 'decision' ? `${P.REASON[c.decision.code] && P.REASON[c.decision.code].family === 'wont_run' ? '∅' : '…'} ${esc(reasonLabel(c.decision))}` : 'no build'}</span></div>
+          ${c.kind === 'decision' ? `${PK.status.REASON[c.decision.code] && PK.status.REASON[c.decision.code].family === 'wont_run' ? '∅' : '…'} ${esc(reasonLabel(c.decision))}` : 'no build'}</span></div>
       </div>`;
     }).join('')}
       </div>
@@ -545,12 +546,12 @@
 
   // ---------- Environments --------------------------------------------------
   let envFilter = '', envChip = 'all';
-  window._envF = v => { envFilter = v; P.App.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
-  window._envC = c => { envChip = c; P.App.refresh(); };
+  window._envF = v => { envFilter = v; PK.app.refresh(); const f = document.querySelector('[data-filter]'); if (f) { f.focus(); f.setSelectionRange(999, 999); } };
+  window._envC = c => { envChip = c; PK.app.refresh(); };
 
   VIEWS.environments = function (name) {
     if (name) return VIEWS.envDetail(name);
-    let envs = D().environments.filter(e => !P.team() || e.pipeline.split('/')[0] === P.team());
+    let envs = D().environments.filter(e => !PK.model.team() || e.pipeline.split('/')[0] === PK.model.team());
     const total = envs.length;
     // attention first: drift, then verifying, then quiet greens (newest deploy first)
     const order = e => e.drift ? 0 : !e.verified ? 1 : 2;
@@ -575,21 +576,21 @@
           <td class="mut small nowrap">${ago(e.deployedAt)} · ${esc(e.byBuild)} (${esc(e.by)})</td>
         </tr>`;
     // same grouping as the Pipelines table: team subheads at all-teams scale
-    const grouped = !P.team() && envs.length > 9;
+    const grouped = !PK.model.team() && envs.length > 9;
     const rows = grouped
       ? D().teams.map(t => {
         const g = sorted(envs.filter(e => e.pipeline.split('/')[0] === t.name));
         return g.length ? `<tr class="tsub"><td colspan="5">${esc(t.name)} <span class="mut">· ${g.length}</span></td></tr>${g.map(row).join('')}` : '';
       }).join('')
       : sorted(envs).map(row).join('');
-    return `<div class="page"><h1>Environments <span class="mut small">${total}${P.team() ? ' · team ' + esc(P.team()) : ''}</span></h1>
+    return `<div class="page"><h1>Environments <span class="mut small">${total}${PK.model.team() ? ' · team ' + esc(PK.model.team()) : ''}</span></h1>
       <div class="ctoolbar">
         <input data-filter aria-label="filter environments" placeholder="filter name, pipeline, version…  ( / )" value="${esc(envFilter)}" oninput="_envF(this.value)">
         ${chip('all', 'all')}${chip('attention', `⚠ needs attention${attn ? ' · ' + attn : ''}`)}${chip('drift', '⚠ drift')}${chip('verifying', '● verifying')}
         <span class="sp"></span>
         <span class="mut small">${envs.length} of ${total}</span>
       </div>
-      ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(P.team())}'s pipelines.</div>`)}
+      ${envs.length ? '' : (total ? '<div class="mut pad">Nothing matches this filter.</div>' : `<div class="mut pad">No environments declared by team ${esc(PK.model.team())}'s pipelines.</div>`)}
       <div class="tbl-scroll"><table class="tbl ctbl">
         <thead><tr><th></th><th>environment</th><th>pipeline</th><th>live version</th><th>deployed</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -631,11 +632,11 @@
 
   // ---------- gated-off teaching empty states -------------------------------
   VIEWS.gated = function (id) {
-    const g = P.gatedEmpty[id];
+    const g = PK.nav.gatedEmpty[id];
     if (!g) return '<div class="page">Not found</div>';
     return `<div class="page narrow"><div class="empty">
       <h1>${esc(g[0])}</h1><p class="mut">${esc(g[1])}</p>
       <p><a href="#/">← Home</a></p>
     </div></div>`;
   };
-})();
+})(window.PK);

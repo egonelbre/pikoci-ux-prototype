@@ -4,7 +4,7 @@
 // A route is the hash split on "/": #/p/delivery/graph -> ['p','delivery','graph'].
 // Views are pure functions of the route, which is what lets the self-test
 // render every page into a detached container without touching the address bar.
-(function () {
+(function (PK) {
   'use strict';
 
   // Every page the app can show, with a route that reaches it. The self-test
@@ -55,7 +55,7 @@
 
   function main(route) {
     const [a, b, c, d] = route;
-    const nav = P.navItems().map(i => i.id);
+    const nav = PK.nav.navItems().map(i => i.id);
     const gate = id => nav.includes(id) ? null : VIEWS.gated(id);
 
     if (!a) return VIEWS.home();
@@ -74,4 +74,4 @@
   }
 
   window.ROUTES = { ALL, parse, main, shell: r => VIEWS.shell(r) };
-})();
+})(window.PK);
