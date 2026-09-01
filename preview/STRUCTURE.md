@@ -202,6 +202,11 @@ Three rules keep the lines readable, all of them in `layout.js`:
   things then have to agree, and the self-test checks all three: the topmost
   target takes the outermost lane, its merge node sits highest, and each
   source's outgoing ports leave in the order of the merge nodes they feed.
+- **Junctions are spines, not points.** A fan-in or fan-out node spreads its
+  lines along a short vertical segment with its own ports, exactly the way a
+  real node spreads them along its edge. Terminating five curves at one pixel
+  drew the last stretch of all five on top of itself; several junctions in one
+  column are stacked by their actual heights so they cannot overlap either.
 - **Arrivals** — the last leg reserves room for the corner, a straight run and
   the arrow head, so those stay three distinct shapes. Too little and the
   curve, the run and the triangle smear into one blob; the left gutter on a

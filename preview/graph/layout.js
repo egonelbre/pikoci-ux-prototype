@@ -38,7 +38,9 @@
                              // needs room for a corner, a run and an arrow head
     laneStride: 6,           // offset between nested lanes; below ~5 they merge visually
     maxLanes: 5,             // more than five nested lanes stop being followable
-    fanSpread: 22,           // vertical separation between invisible fan-out nodes
+    fanSpread: 22,           // vertical separation between invisible junction nodes
+    junctionStride: 7,       // spacing of a junction's own ports along its spine
+    junctionGap: 12,         // clear space between two junctions in one column
     cornerR: 10,             // rounded corner radius on routed wrap connectors
     detourClear: 12,         // gap kept between a routed long edge and a node box
     detourStride: 6,         // separation between long edges sharing one channel
@@ -213,6 +215,12 @@
           g.jx = Math.max(8, 8 + g.k * o.laneStride);            // the invisible node
           g.jy = g.targets.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.targets.length
             + (g.k - (gs.length - 1) / 2) * o.fanSpread;
+          // departures spread along a spine, for the same reason
+          g.jh = (g.targets.length - 1) * o.junctionStride;
+          g.portY = {};
+          g.targets.forEach((t, i2) => {
+            g.portY[t.name] = g.jy + (i2 - (g.targets.length - 1) / 2) * o.junctionStride;
+          });
         }
       });
 
@@ -227,8 +235,21 @@
         (cols.get(c) || cols.set(c, []).get(c)).push(g);
       }
       for (const list of cols.values()) {
+        // A junction is a short vertical spine, not a point: its lines attach
+        // at spread ports the way a real node's do, or the last stretch of
+        // five curves is drawn on top of itself.
+        for (const g of list) g.jh = (g.sources.length - 1) * o.junctionStride;
+        const total = list.reduce((s2, g) => s2 + g.jh, 0) + o.junctionGap * (list.length - 1);
         const mid = list.reduce((s2, g) => s2 + srcY(g), 0) / list.length;
-        list.forEach((g, i2) => { g.my = mid + (i2 - (list.length - 1) / 2) * o.fanSpread; });
+        let cursor = mid - total / 2;
+        for (const g of list) {
+          g.my = cursor + g.jh / 2;
+          cursor += g.jh + o.junctionGap;
+          g.portY = {};
+          g.sources.forEach((t, i2) => {
+            g.portY[t.name] = g.my + (i2 - (g.sources.length - 1) / 2) * o.junctionStride;
+          });
+        }
       }
     }
 
