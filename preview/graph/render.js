@@ -55,17 +55,19 @@
     const R = o.cornerR;
     const cap = 'stroke-linecap="round" stroke-linejoin="round"';
     // the head sits clear of the node, not touching it
-    const head = (x2, y2) => `<path d="M${x2 - o.headGap},${y2} l-8,-4.5 v9 z" fill="var(--edge)"/>`;
+    const head = (x2, y2) => `<path d="M${x2 - o.headGap},${y2} l-${o.headLen},-4.5 v9 z" fill="var(--edge)"/>`;
     const line = d => `<path d="${d}" fill="none" stroke="var(--edge)" stroke-width="${g.sw}" ${cap} ${g.dash}/>`;
     // from a start point: right into the lane, down the channel, back left
     const trunk = (sx, sy, ex, ey) =>
       line(`M${sx},${sy} H${g.xR - R} q${R},0 ${R},${R} V${g.cy - R} q0,${R} -${R},${R} H${ex + R} q-${R},0 -${R},${R} V${ey}`);
-    // the last leg into the target, stopping short of the arrow head
+    // The last leg: turn out of the drop, run straight for a bit, then the
+    // head. layout.js placed the turn far enough back that those three are
+    // distinct shapes rather than one smear.
     const arrive = (b2, y2, ex) =>
-      line(`M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - o.headGap - 7}`) + head(b2.x, y2);
+      line(`M${ex},${y2 - R} q0,${R} ${R},${R} H${b2.x - o.headGap - o.headLen + 1}`) + head(b2.x, y2);
 
     if (g.kind === 'in') {
-      const b2 = g.b, y2 = g.entryY, ex = Math.max(6, b2.x - 12 - g.kIn * 5);
+      const b2 = g.b, y2 = g.entryY, ex = g.entryX;
       // each source curves into the merge node, then ONE trunk crosses
       let s2 = '';
       for (const t of g.sources) {
@@ -76,14 +78,16 @@
     }
 
     if (g.targets.length === 1) {
-      const b2 = g.targets[0].p, y2 = g.entryY, ex = Math.max(6, b2.x - 12 - g.kIn * 5);
+      const b2 = g.targets[0].p, y2 = g.entryY, ex = g.entryX;
       return trunk(g.a.x + g.a.w, g.y1, ex, y2 - R) + arrive(b2, y2, ex);
     }
     // fan-out splits ONCE at the invisible node layout put in the new row
     let s2 = trunk(g.a.x + g.a.w, g.y1, g.jx, g.jy);
     for (const t of g.targets) {
       const y2 = g.fanY[t.name], mx = (g.jx + t.p.x) / 2;
-      s2 += line(`M${g.jx},${g.jy} C${mx},${g.jy} ${mx},${y2} ${t.p.x - o.headGap - 1},${y2}`) + head(t.p.x, y2);
+      // a bezier already arrives horizontally, so it only needs to stop at the
+      // head rather than reserve a straight run before it
+      s2 += line(`M${g.jx},${g.jy} C${mx},${g.jy} ${mx},${y2} ${t.p.x - o.headGap - o.headLen + 1},${y2}`) + head(t.p.x, y2);
     }
     return s2;
   }

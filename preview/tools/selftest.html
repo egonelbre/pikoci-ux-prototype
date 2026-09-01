@@ -257,6 +257,91 @@
     return bad;
   });
 
+  // ---------- graph routing invariants -------------------------------------
+  // These are geometry, not markup, so they are checked once over every
+  // pipeline rather than per route. Each one is a mistake that has been made:
+  // a line passing behind a node, two wrap trunks crossing because their lanes
+  // were ordered by something that was a tie, and an arrow head landing on top
+  // of the curve that feeds it.
+  function graphChecks() {
+    const out2 = [];
+    const { layout, OPTS } = PK.graph;
+    for (const pl of window.DATA.pipelines) {
+      let lay;
+      try { lay = layout(pl); } catch (e) { out2.push(`${pl.name}: layout threw — ${e.message}`); continue; }
+      const nodes = Object.entries(lay.pos).map(([n, q]) => Object.assign({ n }, q));
+
+      // 1. no same-row edge crosses a node box
+      for (const e of lay.flat) {
+        const x1 = e.a.x + e.a.w, x2 = e.b.x;
+        const inSpan = nodes.filter(q => q.n !== e.from && q.n !== e.to
+          && q.row === e.a.row && q.x < x2 && q.x + q.w > x1);
+        if (!inSpan.length) continue;
+        const hit = e.detour
+          ? inSpan.filter(q => q.y - 2 < e.detour.y && q.y + q.h + 2 > e.detour.y)
+          : inSpan.filter(q => {
+            const lo = Math.min(e.y1, e.y2), hi = Math.max(e.y1, e.y2);
+            return q.y < hi + OPTS.detourClear && q.y + q.h > lo - OPTS.detourClear;
+          });
+        if (hit.length) out2.push(`${pl.name}: ${e.from} → ${e.to} passes through ${hit.map(h => h.n).join(', ')}`);
+      }
+
+      // 2. wrap trunks nest: channel order must match arrival order, or two
+      //    routed lines cross somewhere along the gutter
+      const byRow = {};
+      for (const g of lay.wraps) (byRow[g.row] = byRow[g.row] || []).push(g);
+      for (const [r, gs] of Object.entries(byRow)) {
+        const arrivalY = g => g.kind === 'in' ? g.b.y + g.b.h / 2 : g.targets[0].p.y;
+        const byChan = gs.slice().sort((p, q) => p.cy - q.cy).map(arrivalY);
+        const sorted = byChan.slice().sort((p, q) => q - p);   // lowest channel = topmost target
+        if (byChan.join() !== sorted.join())
+          out2.push(`${pl.name} row ${r}: wrap lanes are not nested — channels ${byChan.map(Math.round).join(',')} arrive out of order`);
+      }
+
+      // 3. merge nodes follow their lanes: among fan-ins sharing a merge
+      //    column, the one on the outermost lane (largest cy) must sit
+      //    highest. Getting this backwards is what crossed delivery's lines.
+      const cols = {};
+      for (const g of lay.wraps) {
+        if (g.kind !== 'in') continue;
+        const c = Math.round(g.mx);
+        (cols[c] = cols[c] || []).push(g);
+      }
+      for (const list of Object.values(cols)) {
+        if (list.length < 2) continue;
+        const byMerge = list.slice().sort((p, q) => p.my - q.my).map(g => Math.round(g.cy));
+        const want = byMerge.slice().sort((p, q) => q - p);
+        if (byMerge.join() !== want.join())
+          out2.push(`${pl.name}: merge nodes do not follow their lanes — top-to-bottom they sit on channels ${byMerge.join(',')}`);
+      }
+
+      // 4. a source feeding several merge nodes must leave in the order those
+      //    merge nodes sit, or its curves cross each other on the way out
+      const perSource = {};
+      for (const g of lay.wraps) {
+        if (g.kind !== 'in') continue;
+        for (const t of g.sources) (perSource[t.name] = perSource[t.name] || []).push({ port: g.srcY1[t.name], my: g.my });
+      }
+      for (const [name, list] of Object.entries(perSource)) {
+        if (list.length < 2) continue;
+        const byPort = list.slice().sort((p, q) => p.port - q.port).map(x => Math.round(x.my));
+        const want = byPort.slice().sort((p, q) => p - q);
+        if (byPort.join() !== want.join())
+          out2.push(`${pl.name}: ${name}'s outgoing ports are not ordered by destination (${byPort.join(',')}) — its curves cross`);
+      }
+
+      // 5. an arrow head needs the corner, the run and the triangle to fit
+      for (const g of lay.wraps) {
+        if (g.kind !== 'in' && g.targets.length > 1) continue;   // fan-out arrives on a bezier
+        const tgt = g.kind === 'in' ? g.b : g.targets[0].p;
+        const need = OPTS.cornerR + OPTS.arriveRun + OPTS.headLen + OPTS.headGap;
+        if (tgt.x - g.entryX < need - 0.5)
+          out2.push(`${pl.name}: arrival into ${g.kind === 'in' ? g.to : g.targets[0].name} has ${Math.round(tgt.x - g.entryX)}px, needs ${need}`);
+      }
+    }
+    return out2;
+  }
+
   // ---------- runner -------------------------------------------------------
   function renderRoute(hash) {
     const route = ROUTES.parse(hash);
@@ -315,6 +400,23 @@
         (findings.length
           ? findings.map(f => `<div class="f ${f.sev}">${f.text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</div>`).join('')
           : '<div class="f pass">all checks pass</div>');
+      out.appendChild(d);
+    }
+
+    // geometry invariants, checked once across every pipeline
+    {
+      let findings = [];
+      try { findings = graphChecks().map(t => ({ sev: 'fail', text: t })); }
+      catch (e) { findings = [{ sev: 'fail', text: 'graph checks threw: ' + e.message }]; }
+      fails += findings.length;
+      const d = document.createElement('details');
+      d.className = 'grp';
+      d.setAttribute('data-bad', String(findings.length));
+      if (findings.length) d.open = true;
+      d.innerHTML = `<summary>${findings.length ? '✕' : '✓'} <code>graph routing</code> geometry invariants over all ${window.DATA.pipelines.length} pipelines`
+        + `${findings.length ? ` — ${findings.length} failure${findings.length === 1 ? '' : 's'}` : ''}</summary>`
+        + (findings.length ? findings.map(f => `<div class="f fail">${f.text}</div>`).join('')
+          : '<div class="f pass">no edge behind a node · lanes nested · merge nodes follow their lanes · ports ordered by destination · arrow heads clear</div>');
       out.appendChild(d);
     }
 

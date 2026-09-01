@@ -33,8 +33,9 @@
     MAXW: 1160,              // wrap width — a 13" laptop with the nav open
     rowGap: 52,              // vertical space between rows; the wrap lanes live here
     wrapGutter: 42,          // right margin held back so a lane never clips the edge
-    leftGutter: 34,          // left margin on wrapped graphs, so drops into the
-                             // first column sit side by side instead of stacking
+    leftGutter: 52,          // left margin on wrapped graphs: the drop lanes into
+                             // the first column sit side by side here, and each
+                             // needs room for a corner, a run and an arrow head
     laneStride: 6,           // offset between nested lanes; below ~5 they merge visually
     maxLanes: 5,             // more than five nested lanes stop being followable
     fanSpread: 22,           // vertical separation between invisible fan-out nodes
@@ -43,6 +44,9 @@
     detourStride: 6,         // separation between long edges sharing one channel
     detourInset: 2,          // keep a line just off an alley's own edges
     headGap: 6,              // clear space between an arrow head and its node
+    headLen: 8,              // length of the arrow head itself
+    arriveRun: 9,            // straight run between the last corner and the head,
+                             // so the curve and the triangle stay separate shapes
     mergeGap: 30,            // room each side of a fan-in's invisible merge node
     detourStub: 16,          // straight run out of a port before the first turn
   };
@@ -170,20 +174,29 @@
     // ---- lanes: the topmost source takes the OUTERMOST right lane and the
     // LOWEST channel, so lanes nest instead of crossing. Entry lanes reverse
     // (kIn), so a channel coming in from outside ends up inside afterwards ----
-    // A fan-in group is ranked by where its sources sit, since that is where
-    // its trunk leaves from.
-    const srcY = g => g.kind === 'in'
-      ? g.sources.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.sources.length
-      : g.a.y;
+    // What a trunk is ranked by: for a fan-out, where it LEAVES — for a fan-in,
+    // where it ARRIVES. A fan-in's start is its merge node, and that is ours to
+    // place, so the targets lead and the merge nodes follow. Ranking fan-ins by
+    // their sources instead is what made delivery's lines cross: all three
+    // itest groups share the same five unit jobs, so the key was a tie and the
+    // lanes came out in an order unrelated to where they were going.
+    const rankY = g => g.kind === 'in' ? g.b.y + g.b.h / 2 : g.a.y;
+    const srcY = g => g.sources.reduce((s2, t) => s2 + t.p.y + t.p.h / 2, 0) / g.sources.length;
     const byRow = {};
     for (const g of wrapGroups.values()) (byRow[g.row] = byRow[g.row] || []).push(g);
     for (const r of Object.keys(byRow)) {
-      const gs = byRow[r].sort((p, q) => srcY(p) - srcY(q));
+      const gs = byRow[r].sort((p, q) => rankY(p) - rankY(q));
       gs.forEach((g, i) => {
         g.k = (gs.length - 1 - i) % o.maxLanes;
         g.kIn = Math.min(gs.length, o.maxLanes) - 1 - g.k;
         g.xR = LX + maxRowW - pad + 10 + g.k * o.laneStride;
         g.cy = rowY[g.row] - Math.round(rowGap * 0.62) + g.k * o.laneStride;
+        // where the trunk turns from vertical back to horizontal. It has to
+        // leave room for the whole arrival — corner, straight run, head, gap —
+        // or the curve and the triangle overlap into a blob.
+        const arrival = o.cornerR + o.arriveRun + o.headLen + o.headGap;
+        const tgt = g.kind === 'in' ? g.b : g.targets[0].p;
+        g.entryX = Math.max(6, tgt.x - arrival - g.kIn * o.laneStride);
         if (g.kind === 'in') {
           // the merge node: right of every source, left of the lane it feeds
           g.sources.sort((p, q) => p.p.y - q.p.y);
@@ -195,7 +208,6 @@
           g.mx = rightmost + o.mergeGap;
           g.xR = Math.max(g.xR, g.mx + o.mergeGap);
           W = Math.max(W, g.xR + 16);
-          g.my = srcY(g) + (g.k - (gs.length - 1) / 2) * o.fanSpread;
         } else if (g.targets.length > 1) {
           g.targets.sort((p, q) => p.p.y - q.p.y);
           g.jx = Math.max(8, 8 + g.k * o.laneStride);            // the invisible node
@@ -203,6 +215,21 @@
             + (g.k - (gs.length - 1) / 2) * o.fanSpread;
         }
       });
+
+      // Merge nodes, placed after the lanes because they follow them. gs is
+      // already in target order, so among the fan-ins sharing a merge column
+      // the topmost target sits highest — which is also the one on the
+      // outermost lane, so no two routes cross anywhere along their length.
+      const cols = new Map();
+      for (const g of gs) {
+        if (g.kind !== 'in') continue;
+        const c = Math.round(g.mx);
+        (cols.get(c) || cols.set(c, []).get(c)).push(g);
+      }
+      for (const list of cols.values()) {
+        const mid = list.reduce((s2, g) => s2 + srcY(g), 0) / list.length;
+        list.forEach((g, i2) => { g.my = mid + (i2 - (list.length - 1) / 2) * o.fanSpread; });
+      }
     }
 
     // ---- ports: a node's attachment points spread evenly along its edge,
@@ -220,7 +247,7 @@
         // one port per source, and ONE arrival on the target — the whole point
         g.srcY1 = {};
         for (const t of g.sources)
-          slot(outs, t.name).push({ key: 1e6 + g.row, set: y => { g.srcY1[t.name] = y; } });
+          slot(outs, t.name).push({ key: 1e6 + g.my, set: y => { g.srcY1[t.name] = y; } });
         slot(ins, g.to).push({ key: -1e6 - g.cy, set: y => { g.entryY = y; } });
         continue;
       }

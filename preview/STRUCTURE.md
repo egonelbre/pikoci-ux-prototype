@@ -194,6 +194,18 @@ Three rules keep the lines readable, all of them in `layout.js`:
   node *in their own row*, so one trunk crosses the canvas instead of three.
   Fan-in wins any edge both groupings would claim, because it saves more.
   `delivery`'s 17 cross-row edges come out as 4 trunks.
+
+  Fan-in groups are ranked by where they **arrive**, not where they leave: the
+  merge node is ours to place, so the targets lead and the merge nodes follow.
+  Ranking them by their sources is what crossed `delivery`'s lines — all three
+  `itest` groups share the same five `unit` jobs, so the key was a tie. Three
+  things then have to agree, and the self-test checks all three: the topmost
+  target takes the outermost lane, its merge node sits highest, and each
+  source's outgoing ports leave in the order of the merge nodes they feed.
+- **Arrivals** — the last leg reserves room for the corner, a straight run and
+  the arrow head, so those stay three distinct shapes. Too little and the
+  curve, the run and the triangle smear into one blob; the left gutter on a
+  wrapped graph exists to give the nested arrivals that room.
 - **Detours** — an edge spanning several layers would otherwise pass behind
   every node in between (a cron resource triggering a late job did exactly
   that: the line vanished under two boxes and reappeared). It is routed
