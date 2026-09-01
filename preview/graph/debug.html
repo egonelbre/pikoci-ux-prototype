@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PikoCI — graph layout inspector</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../../logo/px/favicon-32.png">
+<link rel="stylesheet" href="../app.css">
+<style>
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
+  #bar { position: sticky; top: 0; z-index: 5; background: var(--bg1); border-bottom: 1px solid var(--line);
+         padding: 10px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  #bar h1 { font-size: 15px; margin: 0; }
+  label { font-size: 13px; display: flex; gap: 5px; align-items: center; }
+  #stats { color: var(--mut); font-size: 12px; }
+  .wrap { padding: 12px 16px 60px; }
+  /* the overlay: drawn on top of the real graph, same coordinate space */
+  .ov text { font: 10px ui-monospace, monospace; fill: #b30016; }
+  .ov .lane { stroke: #b30016; stroke-width: 1; stroke-dasharray: 3 3; fill: none; opacity: .8; }
+  .ov .port { fill: #0a7d28; }
+  .ov .junction { fill: none; stroke: #7a3cc4; stroke-width: 1.5; }
+  .ov .jlabel { fill: #7a3cc4; }
+  .ov .rowline { stroke: #999; stroke-width: 1; stroke-dasharray: 2 6; }
+  .legend span { margin-right: 14px; font-size: 12px; }
+  .k1 { color: #b30016 } .k2 { color: #0a7d28 } .k3 { color: #7a3cc4 }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <h1>graph layout inspector</h1>
+  <label>pipeline <select id="pl"></select></label>
+  <label><input type="checkbox" id="ovLanes" checked> lanes</label>
+  <label><input type="checkbox" id="ovPorts" checked> ports</label>
+  <label><input type="checkbox" id="ovRows" checked> row bands</label>
+  <span id="stats"></span>
+</div>
+<div class="wrap">
+  <p class="legend">
+    <span class="k1">— lane k / xR / cy (cross-row routing channels)</span>
+    <span class="k2">• port attachment points, numbered in fan order</span>
+    <span class="k3">◇ invisible fan-out node (jx, jy)</span>
+  </p>
+  <div id="out"></div>
+</div>
+
+<script src="../data/factory.js"></script>
+<script src="../data/scenarios/versions.js"></script>
+<script src="../data/scenarios/prs.js"></script>
+<script src="../data/scenarios/trunk.js"></script>
+<script src="../data/scenarios/pr-builds.js"></script>
+<script src="../data/scenarios/other-builds.js"></script>
+<script src="../data/scenarios/decisions.js"></script>
+<script src="../data/scenarios/pipelines.js"></script>
+<script src="../data/scenarios/environments.js"></script>
+<script src="../data/generate/pipelines.js"></script>
+<script src="../data/generate/release-branches.js"></script>
+<script src="../data/generate/delivery.js"></script>
+<script src="../data/generate/packaging.js"></script>
+<script src="../data/generate/queued-arm.js"></script>
+<script src="../data/generate/environments.js"></script>
+<script src="../data/scenarios/org.js"></script>
+<script src="../data/scenarios/workers.js"></script>
+<script src="../data/generate/worker-week.js"></script>
+<script src="../data/generate/branches.js"></script>
+<script src="../data/scenarios/audit.js"></script>
+<script src="../data/index.js"></script>
+<script src="../lib/fmt.js"></script>
+<script src="../lib/toast.js"></script>
+<script src="../lib/app.js"></script>
+<script src="../model/status.js"></script>
+<script src="../model/pipelines.js"></script>
+<script src="../model/lineages.js"></script>
+<script src="../model/branches.js"></script>
+<script src="../model/checks.js"></script>
+<script src="../model/builds.js"></script>
+<script src="../model/attention.js"></script>
+<script src="../model/capability.js"></script>
+<script src="../graph/layout.js"></script>
+<script src="../graph/render.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { layout, graphSVG } = window.PK.graph;
+  const sel = document.getElementById('pl');
+  const out = document.getElementById('out');
+
+  // longest chains first — those are the ones that wrap, and the only ones
+  // worth inspecting
+  const pls = window.DATA.pipelines.slice()
+    .sort((a, b) => b.jobs.length - a.jobs.length);
+  sel.innerHTML = pls.map(p => `<option value="${p.name}">${p.name} (${p.jobs.length} jobs)</option>`).join('');
+  sel.value = 'packaging';
+
+  function draw() {
+    const pl = window.DATA.pipelines.find(p => p.name === sel.value);
+    const lay = layout(pl);
+    out.innerHTML = graphSVG(pl, null);
+    const svg = out.querySelector('svg');
+    if (!svg) return;
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('class', 'ov');
+    const add = (tag, attrs, text) => {
+      const el = document.createElementNS(ns, tag);
+      for (const k in attrs) el.setAttribute(k, attrs[k]);
+      if (text != null) el.textContent = text;
+      g.appendChild(el);
+      return el;
+    };
+
+    if (document.getElementById('ovRows').checked) {
+      const rows = new Set(Object.values(lay.pos).map(p => p.row));
+      for (const r of rows) {
+        const ys = Object.values(lay.pos).filter(p => p.row === r);
+        const top = Math.min(...ys.map(p => p.y)) - 6;
+        add('line', { class: 'rowline', x1: 0, y1: top, x2: lay.W, y2: top });
+        add('text', { x: 2, y: top - 3, fill: '#999' }, 'row ' + r);
+      }
+    }
+
+    if (document.getElementById('ovLanes').checked) {
+      for (const w of lay.wraps) {
+        add('path', { class: 'lane', d: `M${w.xR},0 V${lay.H}` });
+        add('path', { class: 'lane', d: `M0,${w.cy} H${lay.W}` });
+        // label to the LEFT of the lane: the lanes sit in the right gutter, so
+        // anything anchored past them falls off the canvas
+        add('text', { x: w.xR - 4, y: w.cy - 4, 'text-anchor': 'end' }, `k${w.k}/in${w.kIn} ← ${w.from}`);
+        if (w.targets.length > 1) {
+          add('circle', { class: 'junction', cx: w.jx, cy: w.jy, r: 5 });
+          add('text', { class: 'jlabel', x: w.jx + 8, y: w.jy - 6 }, `fan ${w.targets.length} @${Math.round(w.jx)},${Math.round(w.jy)}`);
+        }
+      }
+    }
+
+    if (document.getElementById('ovPorts').checked) {
+      lay.flat.forEach(e => {
+        add('circle', { class: 'port', cx: e.a.x + e.a.w, cy: e.y1, r: 2.5 });
+        add('circle', { class: 'port', cx: e.b.x, cy: e.y2, r: 2.5 });
+      });
+      lay.wraps.forEach(w => {
+        add('circle', { class: 'port', cx: w.a.x + w.a.w, cy: w.y1, r: 2.5 });
+        if (w.targets.length === 1) add('circle', { class: 'port', cx: w.targets[0].p.x, cy: w.entryY, r: 2.5 });
+        else for (const t of w.targets) add('circle', { class: 'port', cx: t.p.x, cy: w.fanY[t.name], r: 2.5 });
+      });
+    }
+
+    svg.appendChild(g);
+    document.getElementById('stats').textContent =
+      `${lay.nRows} row${lay.nRows === 1 ? '' : 's'} · ${Object.keys(lay.pos).length} nodes · ` +
+      `${lay.flat.length} same-row edges · ${lay.wraps.length} wrap group${lay.wraps.length === 1 ? '' : 's'} · ` +
+      `canvas ${Math.round(lay.W)}x${Math.round(lay.H)}`;
+  }
+
+  sel.onchange = draw;
+  ['ovLanes', 'ovPorts', 'ovRows'].forEach(id => { document.getElementById(id).onchange = draw; });
+  draw();
+})();
+</script>
+</body>
+</html>
