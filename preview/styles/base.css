@@ -46,3 +46,16 @@ svg a:focus-visible rect { stroke: var(--fg); stroke-width: 2; }
 /* Short all-caps labels need tracking; lowercase body text does not. */
 /* Short all-caps labels need tracking; lowercase body text does not. */
 :is(.style-pop legend, .b2-sec, .b2-grp, .jrow.st .type, .wk-lab, .step-head .type) { letter-spacing: .08em; }
+
+/* see components/buttons.css: trim the half-leading, add it back as padding.
+   Not on `code` — inline-block would stop long identifiers wrapping. */
+@supports (text-box: trim-both cap alphabetic) {
+  .kbd { display: inline-block; text-box: trim-both cap alphabetic; padding-block: .4em; }
+  /* Headings: the margins become the gap you actually see, cap to baseline,
+     instead of the gap plus whatever half-leading the current font carries.
+     The em term is the leading put back, so the spacing looks as it does
+     today in the default font and now holds across the font switcher. */
+  h1 { text-box: trim-both cap alphabetic; margin: calc(4px + .25em) 0 calc(14px + .25em); }
+  h2 { text-box: trim-both cap alphabetic; margin: calc(20px + .275em) 0 calc(8px + .275em); }
+  h3 { text-box: trim-both cap alphabetic; margin: calc(14px + .3em) 0 calc(6px + .3em); }
+}

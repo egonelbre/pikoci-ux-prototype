@@ -14,3 +14,18 @@
 .tabs .tab.on, .tabs-inline .tab.on { background: var(--bg1); color: var(--fg); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 .tabs-inline { display: inline-flex; gap: 2px; background: var(--bg2); border-radius: 7px; padding: 2px; }
 [data-theme="dark"] .btn.primary { background: #1E72EA; border-color: #1E72EA; }
+
+/* Optical centering. Padding measured from the font's ascender/descender
+   puts the text off-centre by up to ~4px across the font switcher at 11px
+   (Courier Prime sits 2.3px low, Roboto Slab 1.7px high). Trimming to
+   cap/baseline makes the padding mean what it looks like; the .4em adds
+   back the half-leading the trim removed, so the boxes keep their height.
+   Progressive: browsers without text-box keep the values above. */
+@supports (text-box: trim-both cap alphabetic) {
+  :is(.btn, .chip, .badge, .tabs .tab, .tabs-inline .tab) { text-box: trim-both cap alphabetic; }
+  .badge { display: inline-block; }
+  .btn { padding-block: calc(4px + .4em); }
+  .btn.sm { padding-block: calc(2px + .4em); }
+  .chip, .badge { padding-block: calc(1px + .4em); }
+  .tabs .tab, .tabs-inline .tab { padding-block: calc(3px + .4em); }
+}

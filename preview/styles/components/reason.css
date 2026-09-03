@@ -8,3 +8,8 @@
 .reason-detail { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: max-content; max-width: 340px;
   font-size: 12px; color: var(--fg); background: var(--bg1); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 11px; box-shadow: 0 6px 20px rgba(0,0,0,.18); text-align: left; white-space: normal; }
+
+/* see buttons.css: trim the half-leading, add it back as padding */
+@supports (text-box: trim-both cap alphabetic) {
+  .reason { text-box: trim-both cap alphabetic; padding-block: .4em; }
+}

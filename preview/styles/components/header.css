@@ -17,3 +17,8 @@ header nav a.on, header > a.on { color: var(--fg); font-weight: 700; }
 .team-head { font-size: 13px; font-weight: 600; color: var(--mut); margin: 20px 0 8px; display: flex; gap: 8px; align-items: baseline; }
 .team-head:first-child, h1 + .team-head { margin-top: 6px; }
 header nav { flex-wrap: wrap; }
+
+/* see buttons.css: trim the half-leading, add it back as padding */
+@supports (text-box: trim-both cap alphabetic) {
+  .attn-badge, .preview-tag { display: inline-block; text-box: trim-both cap alphabetic; padding-block: .4em; }
+}

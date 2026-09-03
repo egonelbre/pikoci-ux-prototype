@@ -7,3 +7,8 @@
 .chip-btn { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; background: var(--bg1); color: var(--mut); cursor: pointer; }
 .chip-btn:hover { border-color: var(--mut); color: var(--fg); }
 .chip-btn.on { background: var(--fg); color: var(--bg1); border-color: var(--fg); }
+
+/* see buttons.css: trim the half-leading, add it back as padding */
+@supports (text-box: trim-both cap alphabetic) {
+  .chip-btn { text-box: trim-both cap alphabetic; padding-block: calc(1px + .4em); }
+}
